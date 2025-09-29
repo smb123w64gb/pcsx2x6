@@ -21,7 +21,7 @@ if [ "${INSTALLDIR:0:1}" != "/" ]; then
 fi
 
 FREETYPE=2.14.1
-HARFBUZZ=11.5.0
+HARFBUZZ=12.0.0
 SDL=SDL3-3.2.22
 ZSTD=1.5.7
 LZ4=1.10.0
@@ -32,7 +32,7 @@ FFMPEG=6.0
 MOLTENVK=1.2.9
 QT=6.7.3
 QTAPNG=1.3.0
-KDDOCKWIDGETS=2.2.3
+KDDOCKWIDGETS=2.3.0
 PLUTOVG=1.3.1
 PLUTOSVG=0.0.7
 
@@ -59,7 +59,7 @@ CMAKE_COMMON=(
 
 cat > SHASUMS <<EOF
 32427e8c471ac095853212a37aef816c60b42052d4d9e48230bab3bdf2936ccc  freetype-$FREETYPE.tar.xz
-119778e3a692806e45104b2cdfda807a8df2ccf5421c50a016aa4b7b82260205  harfbuzz-$HARFBUZZ.tar.gz
+c4a398539c3e0fdc9a82dfe7824d0438cae78c1e2124e7c6ada3dfa600cdb6c8  harfbuzz-$HARFBUZZ.tar.gz
 f29d00cbcee273c0a54f3f32f86bf5c595e8823a96b1d92a145aac40571ebfcc  $SDL.tar.gz
 eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  zstd-$ZSTD.tar.gz
 537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b  lz4-$LZ4.tar.gz
@@ -79,7 +79,7 @@ a8e4a25e5c2686fd36981e527ed05e451fcfc226bddf350f4e76181371190937  shaderc-$SHADE
 9427deccbdf4bde6a269938df38c6bd75247493786a310d8d733a2c82065ef47  shaderc-glslang-$SHADERC_GLSLANG.tar.gz
 c2225a49c3d7efa5c4f4ce4a6b42081e6ea3daca376f3353d9d7c2722d77a28a  shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz
 44d1005880c583fc00a0fb41c839214c68214b000ea8dcb54d352732fee600ff  shaderc-spirv-tools-$SHADERC_SPIRVTOOLS.tar.gz
-b8529755b2d54205341766ae168e83177c6120660539f9afba71af6bca4b81ec  KDDockWidgets-$KDDOCKWIDGETS.tar.gz
+843baf9e1812c1ab82fd81d85b57cbc0d29bb43245efeb2539039780004b1056  KDDockWidgets-$KDDOCKWIDGETS.tar.gz
 bea672eb96ee36c2cbeb911b9bac66dfe989b3ad9a9943101e00aeb2df2aefdb  plutovg-$PLUTOVG.tar.gz
 78561b571ac224030cdc450ca2986b4de915c2ba7616004a6d71a379bffd15f3  plutosvg-$PLUTOSVG.tar.gz
 EOF
@@ -352,7 +352,6 @@ echo "Building KDDockWidgets..."
 rm -fr "KDDockWidgets-$KDDOCKWIDGETS"
 tar xf "KDDockWidgets-$KDDOCKWIDGETS.tar.gz"
 cd "KDDockWidgets-$KDDOCKWIDGETS"
-patch -p1 < "$SCRIPTDIR/../common/kddockwidgets-dodgy-include.patch"
 cmake "${CMAKE_COMMON[@]}" -DKDDockWidgets_QT6=true -DKDDockWidgets_EXAMPLES=false -DKDDockWidgets_FRONTENDS=qtwidgets -B build
 make -C build "-j$NPROCS"
 make -C build install
