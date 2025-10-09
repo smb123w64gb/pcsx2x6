@@ -238,7 +238,9 @@ public:
 	std::unique_ptr<GSDumpBase> m_dump;
 	bool m_scissor_invalid = false;
 	bool m_quad_check_valid = false;
+	bool m_quad_check_valid_shuffle = false;
 	bool m_are_quads = false;
+	bool m_are_quads_shuffle = false;
 	bool m_nativeres = false;
 	bool m_mipmap = false;
 	bool m_texflush_flag = false;
@@ -319,6 +321,7 @@ public:
 
 	PRIM_OVERLAP m_prim_overlap = PRIM_OVERLAP_UNKNOW;
 	std::vector<size_t> m_drawlist;
+	std::vector<GSVector4i> m_drawlist_bbox;
 
 	struct GSPCRTCRegs
 	{
@@ -446,9 +449,14 @@ public:
 	void DumpVertices(const std::string& filename);
 	void DumpTransferList(const std::string& filename);
 	void DumpTransferImages();
-
+	
+	template<bool shuffle_check>
+	bool TrianglesAreQuadsImpl();
 	bool TrianglesAreQuads(bool shuffle_check = false);
-	PRIM_OVERLAP PrimitiveOverlap();
+	template <u32 primclass>
+	PRIM_OVERLAP GetPrimitiveOverlapDrawlistImpl(bool save_drawlist = false, bool save_bbox = false, float bbox_scale = 1.0f);
+	PRIM_OVERLAP GetPrimitiveOverlapDrawlist(bool save_drawlist = false, bool save_bbox = false, float bbox_scale = 1.0f);
+	PRIM_OVERLAP PrimitiveOverlap(bool save_drawlist = false);
 	bool SpriteDrawWithoutGaps();
 	void CalculatePrimitiveCoversWithoutGaps();
 	GIFRegTEX0 GetTex0Layer(u32 lod);

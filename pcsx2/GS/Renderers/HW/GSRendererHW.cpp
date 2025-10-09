@@ -1798,8 +1798,12 @@ void GSRendererHW::HandleManualDeswizzle()
 	if (!m_vt.m_eq.z)
 		return;
 
-	// Check if it's doing manual deswizzling first (draws are 32x16), if they are, check if the Z is flat, if not, we're gonna have to get creative and swap around the quandrants, but that's a TODO.
+	// Check if it's doing manual deswizzling first (draws are 32x16), if they are, check if the Z is flat, if not,
+	// we're gonna have to get creative and swap around the quandrants, but that's a TODO.
 	GSVertex* v = &m_vertex.buff[0];
+
+	// Check for page quadrant and compare it to the quadrant from the verts, if it does match then we need to do correction.
+	const GSVector2i page_quadrant = GSLocalMemory::m_psm[m_cached_ctx.FRAME.PSM].pgs / 2;
 
 	if (PRIM->FST)
 	{
@@ -1808,7 +1812,7 @@ void GSRendererHW::HandleManualDeswizzle()
 			const u32 index_first = m_index.buff[i];
 			const u32 index_last = m_index.buff[i + 1];
 
-			if ((abs((v[index_last].U) - (v[index_first].U)) >> 4) != 32 || (abs((v[index_last].V) - (v[index_first].V)) >> 4) != 16)
+			if ((abs((v[index_last].U) - (v[index_first].U)) >> 4) != page_quadrant.x || (abs((v[index_last].V) - (v[index_first].V)) >> 4) != page_quadrant.y)
 				return;
 		}
 	}
@@ -1821,7 +1825,7 @@ void GSRendererHW::HandleManualDeswizzle()
 			const u32 x = abs(((v[index_last].ST.S / v[index_last].RGBAQ.Q) * (1 << m_context->TEX0.TW)) - ((v[index_first].ST.S / v[index_first].RGBAQ.Q) * (1 << m_context->TEX0.TW)));
 			const u32 y = abs(((v[index_last].ST.T / v[index_last].RGBAQ.Q) * (1 << m_context->TEX0.TH)) - ((v[index_first].ST.T / v[index_first].RGBAQ.Q) * (1 << m_context->TEX0.TH)));
 
-			if (x != 32 || y != 16)
+			if (x != static_cast<u32>(page_quadrant.x) || y != static_cast<u32>(page_quadrant.y))
 				return;
 		}
 	}
@@ -5876,7 +5880,7 @@ void GSRendererHW::EmulateBlending(int rt_alpha_min, int rt_alpha_max, const boo
 				// Initial idea was to enable accurate blending for sprite rendering to handle
 				// correctly post-processing effect. Some games (ZoE) use tons of sprites as particles.
 				// In order to keep it fast, let's limit it to smaller draw call.
-				sw_blending |= m_vt.m_primclass == GS_SPRITE_CLASS && m_drawlist.size() < 100;
+				sw_blending |= m_vt.m_primclass == GS_SPRITE_CLASS && ComputeDrawlistGetSize(rt->m_scale) < 100;
 				[[fallthrough]];
 			case AccBlendLevel::Basic:
 				// Prefer sw blend if possible.
@@ -6685,7 +6689,8 @@ __ri void GSRendererHW::EmulateTextureSampler(const GSTextureCache::Target* rt, 
 			}
 		}
 
-		if (m_vt.m_primclass == GS_SPRITE_CLASS && GSLocalMemory::m_psm[m_cached_ctx.TEX0.PSM].pal > 0 && m_index.tail >= 4)
+		if (m_vt.m_primclass == GS_SPRITE_CLASS && m_index.tail >= 4 && GSLocalMemory::m_psm[m_cached_ctx.TEX0.PSM].bpp >= 16 &&
+			((tex->m_from_target_TEX0.PSM & 0x30) == 0x30 || GSLocalMemory::m_psm[m_cached_ctx.TEX0.PSM].pal > 0))
 		{
 			HandleManualDeswizzle();
 		}
@@ -7334,7 +7339,7 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 	// Upscaling hack to avoid various line/grid issues
 	MergeSprite(tex);
 
-	m_prim_overlap = PrimitiveOverlap();
+	m_prim_overlap = PrimitiveOverlap(false);
 
 	if (rt)
 	{
@@ -7537,10 +7542,17 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 				GL_PERF("DATE: Fast with alpha %d-%d", GetAlphaMinMax().min, GetAlphaMinMax().max);
 				DATE_one = true;
 			}
-			else if (features.texture_barrier && ((m_vt.m_primclass == GS_SPRITE_CLASS && m_drawlist.size() < 10) || (m_index.tail < 30)))
+			else if (features.texture_barrier && ((m_vt.m_primclass == GS_SPRITE_CLASS && ComputeDrawlistGetSize(rt->m_scale) < 10) || (m_index.tail < 30)))
 			{
 				// texture barrier will split the draw call into n draw call. It is very efficient for
 				// few primitive draws. Otherwise it sucks.
+				GL_PERF("DATE: Accurate with alpha %d-%d", GetAlphaMinMax().min, GetAlphaMinMax().max);
+				m_conf.require_full_barrier = true;
+				DATE_BARRIER = true;
+			}
+			else if ((features.texture_barrier || features.multidraw_fb_copy) && m_conf.require_full_barrier)
+			{
+				// Full barrier is enabled (likely sw fbmask), we need to use date barrier.
 				GL_PERF("DATE: Accurate with alpha %d-%d", GetAlphaMinMax().min, GetAlphaMinMax().max);
 				m_conf.require_full_barrier = true;
 				DATE_BARRIER = true;
@@ -8134,7 +8146,12 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 		m_conf.alpha_second_pass.enable = false;
 	}
 
-	m_conf.drawlist = (m_conf.require_full_barrier && m_vt.m_primclass == GS_SPRITE_CLASS) ? &m_drawlist : nullptr;
+	if (m_conf.require_full_barrier && (g_gs_device->Features().texture_barrier || g_gs_device->Features().multidraw_fb_copy))
+	{
+		ComputeDrawlistGetSize(rt->m_scale);
+		m_conf.drawlist = &m_drawlist;
+		m_conf.drawlist_bbox = &m_drawlist_bbox;
+	}
 
 	if (!m_channel_shuffle_width)
 		g_gs_device->RenderHW(m_conf);
@@ -9567,4 +9584,14 @@ void GSRendererHW::EndHLEHardwareDraw(bool force_copy_on_hazard /* = false */)
 
 	if (copy)
 		g_gs_device->Recycle(copy);
+}
+
+std::size_t GSRendererHW::ComputeDrawlistGetSize(float scale)
+{
+	if (m_drawlist.empty())
+	{
+		const bool save_bbox = !g_gs_device->Features().texture_barrier && g_gs_device->Features().multidraw_fb_copy;
+		GetPrimitiveOverlapDrawlist(true, save_bbox, scale);
+	}
+	return m_drawlist.size();
 }
