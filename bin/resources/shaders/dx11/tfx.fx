@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #define FMT_32 0
@@ -71,6 +71,7 @@
 #define PS_DITHER 0
 #define PS_DITHER_ADJUST 0
 #define PS_ZCLAMP 0
+#define PS_ZFLOOR 0
 #define PS_SCANMSK 0
 #define PS_AUTOMATIC_LOD 0
 #define PS_MANUAL_LOD 0
@@ -111,7 +112,7 @@ struct VS_OUTPUT
 
 struct PS_INPUT
 {
-	float4 p : SV_Position;
+	noperspective centroid float4 p : SV_Position;
 	float4 t : TEXCOORD0;
 	float4 ti : TEXCOORD2;
 #if VS_IIP != 0 || GS_IIP != 0 || PS_IIP != 0
@@ -138,8 +139,12 @@ struct PS_OUTPUT
 #endif
 #endif
 #endif
-#if PS_ZCLAMP
-	float depth : SV_Depth;
+#if (PS_ZFLOOR || PS_ZCLAMP)
+	#if PS_HAS_CONSERVATIVE_DEPTH
+		float depth : SV_DepthLessEqual;
+	#else
+		float depth : SV_Depth;
+	#endif
 #endif
 };
 
@@ -167,6 +172,7 @@ cbuffer cb1
 	float4 LODParams;
 	float4 STRange;
 	int4 ChannelShuffle;
+	float2 ChannelShuffleOffset;
 	float2 TC_OffsetHack;
 	float2 STScale;
 	float4x4 DitherMatrix;
@@ -378,14 +384,14 @@ float4x4 sample_4p(uint4 u)
 	return c;
 }
 
-int fetch_raw_depth(int2 xy)
+uint fetch_raw_depth(int2 xy)
 {
 #if PS_TEX_IS_FB == 1
 	float4 col = RtTexture.Load(int3(xy, 0));
 #else
 	float4 col = Texture.Load(int3(xy, 0));
 #endif
-	return (int)(col.r * exp2(32.0f));
+	return (uint)(col.r * exp2(32.0f));
 }
 
 float4 fetch_raw_color(int2 xy)
@@ -460,10 +466,10 @@ float4 sample_depth(float2 st, float2 pos)
 	if (PS_TALES_OF_ABYSS_HLE == 1)
 	{
 		// Warning: UV can't be used in channel effect
-		int depth = fetch_raw_depth(pos);
+		uint depth = fetch_raw_depth(pos);
 
 		// Convert msb based on the palette
-		t = Palette.Load(int3((depth >> 8) & 0xFF, 0, 0)) * 255.0f;
+		t = Palette.Load(int3((depth >> 8u) & 0xFFu, 0, 0)) * 255.0f;
 	}
 	else if (PS_URBAN_CHAOS_HLE == 1)
 	{
@@ -474,13 +480,13 @@ float4 sample_depth(float2 st, float2 pos)
 		// To be faster both steps (msb&lsb) are done in a single pass.
 
 		// Warning: UV can't be used in channel effect
-		int depth = fetch_raw_depth(pos);
+		uint depth = fetch_raw_depth(pos);
 
 		// Convert lsb based on the palette
-		t = Palette.Load(int3(depth & 0xFF, 0, 0)) * 255.0f;
+		t = Palette.Load(int3(depth & 0xFFu, 0, 0)) * 255.0f;
 
 		// Msb is easier
-		float green = (float)((depth >> 8) & 0xFF) * 36.0f;
+		float green = (float)((depth >> 8u) & 0xFFu) * 36.0f;
 		green = min(green, 255.0f);
 		t.g += green;
 	}
@@ -532,7 +538,7 @@ float4 fetch_red(int2 xy)
 
 	if ((PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2))
 	{
-		int depth = (fetch_raw_depth(xy)) & 0xFF;
+		uint depth = (fetch_raw_depth(xy)) & 0xFFu;
 		rt = (float4)(depth) / 255.0f;
 	}
 	else
@@ -549,7 +555,7 @@ float4 fetch_green(int2 xy)
 
 	if ((PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2))
 	{
-		int depth = (fetch_raw_depth(xy) >> 8) & 0xFF;
+		uint depth = (fetch_raw_depth(xy) >> 8u) & 0xFFu;
 		rt = (float4)(depth) / 255.0f;
 	}
 	else
@@ -566,7 +572,7 @@ float4 fetch_blue(int2 xy)
 
 	if ((PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2))
 	{
-		int depth = (fetch_raw_depth(xy) >> 16) & 0xFF;
+		uint depth = (fetch_raw_depth(xy) >> 16u) & 0xFFu;
 		rt = (float4)(depth) / 255.0f;
 	}
 	else
@@ -594,8 +600,8 @@ float4 fetch_gXbY(int2 xy)
 {
 	if ((PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2))
 	{
-		int depth = fetch_raw_depth(xy);
-		int bg = (depth >> (8 + ChannelShuffle.w)) & 0xFF;
+		uint depth = fetch_raw_depth(xy);
+		uint bg = (depth >> (8u + uint(ChannelShuffle.w))) & 0xFFu;
 		return (float4)(bg);
 	}
 	else
@@ -739,7 +745,7 @@ float4 fog(float4 c, float f)
 {
 	if(PS_FOG)
 	{
-		c.rgb = trunc(lerp(FogColor, c.rgb, f));
+		c.rgb = trunc(lerp(FogColor, c.rgb, (f * 255.0f) / 256.0f));
 	}
 
 	return c;
@@ -756,17 +762,17 @@ float4 ps_color(PS_INPUT input)
 #endif
 
 #if PS_CHANNEL_FETCH == 1
-	float4 T = fetch_red(int2(input.p.xy));
+	float4 T = fetch_red(int2(input.p.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 2
-	float4 T = fetch_green(int2(input.p.xy));
+	float4 T = fetch_green(int2(input.p.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 3
-	float4 T = fetch_blue(int2(input.p.xy));
+	float4 T = fetch_blue(int2(input.p.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 4
-	float4 T = fetch_alpha(int2(input.p.xy));
+	float4 T = fetch_alpha(int2(input.p.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 5
-	float4 T = fetch_rgb(int2(input.p.xy));
+	float4 T = fetch_rgb(int2(input.p.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 6
-	float4 T = fetch_gXbY(int2(input.p.xy));
+	float4 T = fetch_gXbY(int2(input.p.xy + ChannelShuffleOffset));
 #elif PS_DEPTH_FMT > 0
 	float4 T = sample_depth(st_int, input.p.xy);
 #else
@@ -1197,7 +1203,7 @@ PS_OUTPUT ps_main(PS_INPUT input)
 #if !PS_NO_COLOR1
 	output.c1 = alpha_blend;
 #endif
-#if PS_AFAIL == 3 && !PS_NO_COLOR1 // RGB_ONLY, no dual src blend
+#if PS_AFAIL == 3 && PS_NO_COLOR1 // RGB_ONLY, no dual src blend
 	if (!atst_pass)
 	{
 		float RTa = NEEDS_RT_FOR_AFAIL ? RtTexture.Load(int3(input.p.xy, 0)).a : 0.0f;
@@ -1209,8 +1215,16 @@ PS_OUTPUT ps_main(PS_INPUT input)
 
 #endif // PS_DATE != 1/2
 
+#if PS_ZFLOOR
+float depth_value = floor(input.p.z * exp2(32.0f)) * exp2(-32.0f);
+#else
+float depth_value = input.p.z;
+#endif
+
 #if PS_ZCLAMP
-	output.depth = min(input.p.z, MaxDepthPS);
+	output.depth = min(depth_value, MaxDepthPS);
+#elif PS_ZFLOOR
+	output.depth = depth_value;
 #endif
 
 	return output;

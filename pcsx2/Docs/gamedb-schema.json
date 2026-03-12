@@ -229,11 +229,6 @@
               "minimum": 0,
               "maximum": 100000
             },
-            "halfBottomOverride": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 1
-            },
             "halfPixelOffset": {
               "type": "integer",
               "minimum": 0,
@@ -242,7 +237,7 @@
             "nativeScaling": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 2
+              "maximum": 4
             },
             "roundSprite": {
               "type": "integer",

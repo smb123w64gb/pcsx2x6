@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #pragma once
@@ -323,4 +323,7 @@ namespace Host
 
 	/// Enables relative mouse mode in the host, and/or hides the cursor.
 	void SetMouseMode(bool relative_mode, bool hide_cursor);
+
+	/// Changes the mouse lock setting
+	void SetMouseLock(bool state);
 } // namespace Host

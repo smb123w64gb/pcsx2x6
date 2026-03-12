@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "GraphicsSettingsWidget.h"
@@ -23,9 +23,9 @@ static constexpr RendererInfo s_renderer_info[] = {
 	{QT_TRANSLATE_NOOP("GraphicsSettingsWidget", "Automatic (Default)"), GSRendererType::Auto},
 #ifdef _WIN32
 	//: Graphics backend/engine type. Leave as-is.
-	{QT_TRANSLATE_NOOP("GraphicsSettingsWidget", "Direct3D 11"), GSRendererType::DX11},
+	{QT_TRANSLATE_NOOP("GraphicsSettingsWidget", "Direct3D 11 (Legacy)"), GSRendererType::DX11},
 	//: Graphics backend/engine type. Leave as-is.
-	{QT_TRANSLATE_NOOP("GraphicsSettingsWidget", "Direct3D 12 (Not Recommended)"), GSRendererType::DX12},
+	{QT_TRANSLATE_NOOP("GraphicsSettingsWidget", "Direct3D 12"), GSRendererType::DX12},
 #endif
 #ifdef ENABLE_OPENGL
 	//: Graphics backend/engine type. Leave as-is.
@@ -71,15 +71,6 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	setupTab(m_capture, tr("Media Capture"));
 	m_advanced_tab = setupTab(m_advanced, tr("Advanced"));
 
-#ifndef PCSX2_DEVBUILD
-	if (!dialog()->isPerGameSettings())
-	{
-		// We removed hardware fixes from global settings, but people in the past did set this stuff globally.
-		// So, just reset it all. We can remove this code at some point in the future.
-		resetManualHardwareFixes();
-	}
-#endif
-
 	//////////////////////////////////////////////////////////////////////////
 	// Display Settings
 	//////////////////////////////////////////////////////////////////////////
@@ -96,7 +87,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_display.PCRTCOffsets, "EmuCore/GS", "pcrtc_offsets", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_display.PCRTCOverscan, "EmuCore/GS", "pcrtc_overscan", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_display.PCRTCAntiBlur, "EmuCore/GS", "pcrtc_antiblur", true);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_display.DisableInterlaceOffset, "EmuCore/GS", "disable_interlace_offset", false);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_display.disableInterlaceOffset, "EmuCore/GS", "disable_interlace_offset", false);
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_capture.screenshotSize, "EmuCore/GS", "ScreenshotSize", static_cast<int>(GSScreenshotSize::WindowResolution));
 	SettingWidgetBinder::BindWidgetToIntSetting(
@@ -108,12 +99,12 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_display.cropBottom, "EmuCore/GS", "CropBottom", 0);
 
 	connect(
-		m_display.fullscreenModes, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &GraphicsSettingsWidget::onFullscreenModeChanged);
+		m_display.fullscreenModes, &QComboBox::currentIndexChanged, this, &GraphicsSettingsWidget::onFullscreenModeChanged);
 
 	//////////////////////////////////////////////////////////////////////////
 	// HW Settings
 	//////////////////////////////////////////////////////////////////////////
-	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.textureFiltering, "EmuCore/GS", "filter", static_cast<int>(BiFiltering::PS2));
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.textureFiltering, "EmuCore/GS", "filter", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_TEXTURE_FILTERING_MODE));
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_hw.trilinearFiltering, "EmuCore/GS", "TriFilter", static_cast<int>(TriFiltering::Automatic), -1);
 	SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_hw.anisotropicFiltering, "EmuCore/GS", "MaxAnisotropy",
@@ -123,16 +114,16 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_hw.blending, "EmuCore/GS", "accurate_blending_unit", static_cast<int>(AccBlendLevel::Basic));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.enableHWFixes, "EmuCore/GS", "UserHacks", false);
-	connect(m_hw.upscaleMultiplier, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+	connect(m_hw.upscaleMultiplier, &QComboBox::currentIndexChanged, this,
 		&GraphicsSettingsWidget::onUpscaleMultiplierChanged);
-	connect(m_hw.trilinearFiltering, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+	connect(m_hw.trilinearFiltering, &QComboBox::currentIndexChanged, this,
 		&GraphicsSettingsWidget::onTrilinearFilteringChanged);
 	onTrilinearFilteringChanged();
 
 	//////////////////////////////////////////////////////////////////////////
 	// SW Settings
 	//////////////////////////////////////////////////////////////////////////
-	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_sw.swTextureFiltering, "EmuCore/GS", "filter", static_cast<int>(BiFiltering::PS2));
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_sw.swTextureFiltering, "EmuCore/GS", "filter", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_TEXTURE_FILTERING_MODE));
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_sw.extraSWThreads, "EmuCore/GS", "extrathreads", 2);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_sw.swAutoFlush, "EmuCore/GS", "autoflush_sw", true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_sw.swMipmap, "EmuCore/GS", "mipmap", true);
@@ -156,10 +147,12 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 		sif, m_fixes.disablePartialInvalidation, "EmuCore/GS", "UserHacks_DisablePartialInvalidation", false);
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_fixes.textureInsideRt, "EmuCore/GS", "UserHacks_TextureInsideRt", static_cast<int>(GSTextureInRtMode::Disabled));
+	SettingWidgetBinder::BindWidgetToIntSetting(
+		sif, m_fixes.limit24BitDepth, "EmuCore/GS", "UserHacks_Limit24BitDepth", static_cast<int>(GSLimit24BitDepth::Disabled));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_fixes.readTCOnClose, "EmuCore/GS", "UserHacks_ReadTCOnClose", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_fixes.estimateTextureRegion, "EmuCore/GS", "UserHacks_EstimateTextureRegion", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_fixes.gpuPaletteConversion, "EmuCore/GS", "paltex", false);
-	connect(m_fixes.cpuSpriteRenderBW, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+	connect(m_fixes.cpuSpriteRenderBW, &QComboBox::currentIndexChanged, this,
 		&GraphicsSettingsWidget::onCPUSpriteRenderBWChanged);
 	connect(m_fixes.gpuPaletteConversion, &QCheckBox::checkStateChanged, this, &GraphicsSettingsWidget::onGpuPaletteConversionChanged);
 	onCPUSpriteRenderBWChanged();
@@ -218,7 +211,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_post.shadeBoostGamma, "EmuCore/GS", "ShadeBoost_Gamma", Pcsx2Config::GSOptions::DEFAULT_SHADEBOOST_GAMMA);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_post.shadeBoostSaturation, "EmuCore/GS", "ShadeBoost_Saturation", Pcsx2Config::GSOptions::DEFAULT_SHADEBOOST_SATURATION);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_post.tvShader, "EmuCore/GS", "TVShader", DEFAULT_TV_SHADER_MODE);
-	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_post.casMode, "EmuCore/GS", "CASMode", static_cast<int>(GSCASMode::Disabled));
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_post.casMode, "EmuCore/GS", "CASMode", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_CAS_MODE));
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_post.casSharpness, "EmuCore/GS", "CASSharpness", DEFAULT_CAS_SHARPNESS);
 
 	connect(m_post.shadeBoost, &QCheckBox::checkStateChanged, this, &GraphicsSettingsWidget::onShadeBoostChanged);
@@ -232,24 +225,25 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	// OSD Settings
 	//////////////////////////////////////////////////////////////////////////
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_osd.scale, "EmuCore/GS", "OsdScale", 100.0f);
-	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_osd.messagesPos, "EmuCore/GS", "OsdMessagesPos", static_cast<int>(OsdOverlayPos::TopLeft));
-	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_osd.performancePos, "EmuCore/GS", "OsdPerformancePos", static_cast<int>(OsdOverlayPos::TopRight));
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showSpeed, "EmuCore/GS", "OsdShowSpeed", false);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_osd.messagesPos, "EmuCore/GS", "OsdMessagesPos", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_OSD_MESSAGE_POS));
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_osd.performancePos, "EmuCore/GS", "OsdPerformancePos", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_OSD_PERFORMANCE_POS));
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showSpeedPercentages, "EmuCore/GS", "OsdShowSpeed", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showFPS, "EmuCore/GS", "OsdShowFPS", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showVPS, "EmuCore/GS", "OsdShowVPS", false);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showCPU, "EmuCore/GS", "OsdShowCPU", false);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showGPU, "EmuCore/GS", "OsdShowGPU", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showResolution, "EmuCore/GS", "OsdShowResolution", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showGSStats, "EmuCore/GS", "OsdShowGSStats", false);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showIndicators, "EmuCore/GS", "OsdShowIndicators", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showUsageCPU, "EmuCore/GS", "OsdShowCPU", false);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showUsageGPU, "EmuCore/GS", "OsdShowGPU", false);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showStatusIndicators, "EmuCore/GS", "OsdShowIndicators", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showFrameTimes, "EmuCore/GS", "OsdShowFrameTimes", false);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showHardwareInfo, "EmuCore/GS", "OsdShowHardwareInfo", false);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showVersion, "EmuCore/GS", "OsdShowVersion", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showSettings, "EmuCore/GS", "OsdShowSettings", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showPatches, "EmuCore/GS", "OsdshowPatches", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showInputs, "EmuCore/GS", "OsdShowInputs", false);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showFrameTimes, "EmuCore/GS", "OsdShowFrameTimes", false);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showVersion, "EmuCore/GS", "OsdShowVersion", false);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showHardwareInfo, "EmuCore/GS", "OsdShowHardwareInfo", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showVideoCapture, "EmuCore/GS", "OsdShowVideoCapture", true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showInputRec, "EmuCore/GS", "OsdShowInputRec", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.showTextureReplacements, "EmuCore/GS", "OsdShowTextureReplacements", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_osd.warnAboutUnsafeSettings, "EmuCore", "OsdWarnAboutUnsafeSettings", true);
 
 	//////////////////////////////////////////////////////////////////////////
@@ -277,7 +271,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	//////////////////////////////////////////////////////////////////////////
 	// Non-trivial settings
 	//////////////////////////////////////////////////////////////////////////
-	const int renderer = dialog()->getEffectiveIntValue("EmuCore/GS", "Renderer", static_cast<int>(GSRendererType::Auto));
+	const int renderer = dialog()->getEffectiveIntValue("EmuCore/GS", "Renderer", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_HW_RENDERER));
 	for (const RendererInfo& ri : s_renderer_info)
 	{
 		m_header.rendererDropdown->addItem(qApp->translate("GraphicsSettingsWidget", ri.name));
@@ -288,7 +282,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	// per-game override for renderer is slightly annoying, since we need to populate the global setting field
 	if (sif)
 	{
-		const int global_renderer = Host::GetBaseIntSettingValue("EmuCore/GS", "Renderer", static_cast<int>(GSRendererType::Auto));
+		const int global_renderer = Host::GetBaseIntSettingValue("EmuCore/GS", "Renderer", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_HW_RENDERER));
 		QString global_renderer_name;
 		for (const RendererInfo& ri : s_renderer_info)
 		{
@@ -303,8 +297,8 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 			m_header.rendererDropdown->setCurrentIndex(0);
 	}
 
-	connect(m_header.rendererDropdown, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &GraphicsSettingsWidget::onRendererChanged);
-	connect(m_header.adapterDropdown, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &GraphicsSettingsWidget::onAdapterChanged);
+	connect(m_header.rendererDropdown, &QComboBox::currentIndexChanged, this, &GraphicsSettingsWidget::onRendererChanged);
+	connect(m_header.adapterDropdown, &QComboBox::currentIndexChanged, this, &GraphicsSettingsWidget::onAdapterChanged);
 	connect(m_hw.enableHWFixes, &QCheckBox::checkStateChanged, this, &GraphicsSettingsWidget::updateRendererDependentOptions);
 	connect(m_advanced.extendedUpscales, &QCheckBox::checkStateChanged, this, &GraphicsSettingsWidget::updateRendererDependentOptions);
 	connect(m_hw.textureFiltering, &QComboBox::currentIndexChanged, this, &GraphicsSettingsWidget::onTextureFilteringChange);
@@ -447,7 +441,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 		dialog()->registerWidgetHelp(m_display.noInterlacingPatches, tr("Enable No-Interlacing Patches"), tr("Unchecked"),
 			tr("Automatically loads and applies no-interlacing patches on game start. Can cause issues."));
 
-		dialog()->registerWidgetHelp(m_display.DisableInterlaceOffset, tr("Disable Interlace Offset"), tr("Unchecked"),
+		dialog()->registerWidgetHelp(m_display.disableInterlaceOffset, tr("Disable Interlace Offset"), tr("Unchecked"),
 			tr("Disables interlacing offset which may reduce blurring in some situations."));
 
 		dialog()->registerWidgetHelp(m_display.bilinearFiltering, tr("Bilinear Filtering"), tr("Bilinear (Smooth)"),
@@ -480,7 +474,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 
 		dialog()->registerWidgetHelp(m_display.interlacing, tr("Deinterlacing"), tr("Automatic (Default)"), tr("Determines the deinterlacing method to be used on the interlaced screen of the emulated console. Automatic should be able to correctly deinterlace most games, but if you see visibly shaky graphics, try one of the other options."));
 
-		dialog()->registerWidgetHelp(m_capture.screenshotSize, tr("Screenshot Resolution"), tr("Screen Resolution"),
+		dialog()->registerWidgetHelp(m_capture.screenshotSize, tr("Screenshot Resolution"), tr("Display Resolution"),
 			tr("Determines the resolution at which screenshots will be saved. Internal resolutions preserve more detail at the cost of "
 			   "file size."));
 
@@ -548,9 +542,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 
 		dialog()->registerWidgetHelp(m_hw.blending, tr("Blending Accuracy"), tr("Basic (Recommended)"),
 			tr("Control the accuracy level of the GS blending unit emulation.<br> "
-			   "The higher the setting, the more blending is emulated in the shader accurately, and the higher the speed penalty will "
-			   "be.<br> "
-			   "Note that Direct3D 12's blending is reduced in capability compared to OpenGL/Vulkan/Direct3D 11."));
+			   "The higher the setting, the more blending is emulated in the shader accurately, and the higher the speed penalty will be."));
 
 		dialog()->registerWidgetHelp(m_advanced.texturePreloading, tr("Texture Preloading"), tr("Full (Hash Cache)"),
 			tr("Uploads entire textures at once instead of in small pieces, avoiding redundant uploads when possible. "
@@ -597,10 +589,10 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 		dialog()->registerWidgetHelp(m_fixes.gpuTargetCLUTMode, tr("GPU Target CLUT"), tr("Disabled"),
 			tr("Tries to detect when a game is drawing its own color palette and then renders it on the GPU with special handling."));
 
-		dialog()->registerWidgetHelp(m_fixes.skipDrawStart, tr("Skipdraw Range Start"), tr("0"),
+		dialog()->registerWidgetHelp(m_fixes.skipDrawStart, tr("Skip Draw Range Start"), tr("0"),
 			tr("Completely skips drawing surfaces from the surface in the left box up to the surface specified in the box on the right."));
 
-		dialog()->registerWidgetHelp(m_fixes.skipDrawEnd, tr("Skipdraw Range End"), tr("0"),
+		dialog()->registerWidgetHelp(m_fixes.skipDrawEnd, tr("Skip Draw Range End"), tr("0"),
 			tr("Completely skips drawing surfaces from the surface in the left box up to the surface specified in the box on the right."));
 
 		dialog()->registerWidgetHelp(m_fixes.hwAutoFlush, tr("Auto Flush"), tr("Unchecked"),
@@ -633,6 +625,9 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 
 		dialog()->registerWidgetHelp(m_fixes.textureInsideRt, tr("Texture Inside RT"), tr("Disabled"),
 			tr("Allows the texture cache to reuse as an input texture the inner portion of a previous framebuffer."));
+
+		dialog()->registerWidgetHelp(m_fixes.limit24BitDepth, tr("Limit Depth to 24 Bits"), tr("Disabled"),
+			tr("Truncate 32-bit depth values to 24 bits. Helps games struggling with Z-fighting."));
 
 		dialog()->registerWidgetHelp(m_fixes.readTCOnClose, tr("Read Targets When Closing"), tr("Unchecked"),
 			tr("Flushes all targets in the texture cache back to local memory when shutting down. Can prevent lost visuals when saving "
@@ -670,7 +665,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 			//: Wild Arms: name of a game series. Leave as-is or use an official translation.
 			tr("Lowers the GS precision to avoid gaps between pixels when upscaling. Fixes the text on Wild Arms games."));
 
-		dialog()->registerWidgetHelp(m_upscaling.bilinearHack, tr("Bilinear Upscale"), tr("Unchecked"),
+		dialog()->registerWidgetHelp(m_upscaling.bilinearHack, tr("Bilinear Dirty Upscale"), tr("Unchecked"),
 			tr("Can smooth out textures due to be bilinear filtered when upscaling. E.g. Brave sun glare."));
 
 		dialog()->registerWidgetHelp(m_upscaling.mergeSprite, tr("Merge Sprite"), tr("Unchecked"),
@@ -726,57 +721,62 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 		dialog()->registerWidgetHelp(m_osd.scale, tr("OSD Scale"), tr("100%"), tr("Scales the size of the onscreen OSD from 50% to 500%."));
 
 		dialog()->registerWidgetHelp(m_osd.messagesPos, tr("OSD Messages Position"), tr("Left (Default)"),
-			tr("Shows on-screen-display messages when events occur such as save states being "
+			tr("Position of on-screen-display messages when events occur such as save states being "
 			   "created/loaded, screenshots being taken, etc."));
 
-		dialog()->registerWidgetHelp(m_osd.performancePos, tr("OSD Statistics Position"), tr("Right (Default)"),
-			tr("Shows a variety of on-screen performance data points as selected by the user."));
+		dialog()->registerWidgetHelp(m_osd.performancePos, tr("OSD Performance Position"), tr("Right (Default)"),
+			tr("Position of a variety of on-screen performance data points as selected by the user."));
+
+		dialog()->registerWidgetHelp(m_osd.showSpeedPercentages, tr("Show Speed Percentages"), tr("Unchecked"),
+			tr("Shows the current emulation speed of the system as a percentage."));
 
 		dialog()->registerWidgetHelp(m_osd.showFPS, tr("Show FPS"), tr("Unchecked"),
-			tr("Shows the internal frame rate of the game in the top-right corner of the display."));
+			tr("Shows the number of internal video frames displayed per second by the system."));
 
 		dialog()->registerWidgetHelp(m_osd.showVPS, tr("Show VPS"), tr("Unchecked"),
-			tr("Shows the vsync rate of the emulator in the top-right corner of the display."));
-
-		dialog()->registerWidgetHelp(m_osd.showSpeed, tr("Show Speed Percentages"), tr("Unchecked"),
-			tr("Shows the current emulation speed of the system in the top-right corner of the display as a percentage."));
+			tr("Shows the number of Vsyncs performed per second by the system."));
 
 		dialog()->registerWidgetHelp(m_osd.showResolution, tr("Show Resolution"), tr("Unchecked"),
-			tr("Shows the resolution of the game in the top-right corner of the display."));
+			tr("Shows the internal resolution of the game."));
 
-		dialog()->registerWidgetHelp(m_osd.showCPU, tr("Show CPU Usage"), tr("Unchecked"), tr("Shows host's CPU utilization."));
+		dialog()->registerWidgetHelp(m_osd.showGSStats, tr("Show GS Statistics"), tr("Unchecked"),
+			tr("Shows statistics about the emulated GS such as primitives and draw calls."));
 
-		dialog()->registerWidgetHelp(m_osd.showGPU, tr("Show GPU Usage"), tr("Unchecked"), tr("Shows host's GPU utilization."));
+		dialog()->registerWidgetHelp(m_osd.showUsageCPU, tr("Show CPU Usage"),
+			tr("Unchecked"), tr("Shows the host's CPU utilization based on threads."));
 
-		dialog()->registerWidgetHelp(m_osd.showGSStats, tr("Show Statistics"), tr("Unchecked"),
-			tr("Shows counters for internal graphical utilization, useful for debugging."));
+		dialog()->registerWidgetHelp(m_osd.showUsageGPU, tr("Show GPU Usage"),
+			tr("Unchecked"), tr("Shows the host's GPU utilization."));
 
-		dialog()->registerWidgetHelp(m_osd.showIndicators, tr("Show Indicators"), tr("Checked"),
-			tr("Shows OSD icon indicators for emulation states such as Pausing, Turbo, Fast-Forward, and Slow-Motion."));
-
-		dialog()->registerWidgetHelp(m_osd.showSettings, tr("Show Settings"), tr("Unchecked"),
-			tr("Displays various settings and the current values of those settings, useful for debugging."));
-
-		dialog()->registerWidgetHelp(m_osd.showPatches, tr("Show Patches"), tr("Unchecked"),
-			tr("Shows the amount of currently active patches/cheats on the bottom-right corner of the display."));
-
-		dialog()->registerWidgetHelp(m_osd.showInputs, tr("Show Inputs"), tr("Unchecked"),
-			tr("Shows the current controller state of the system in the bottom-left corner of the display."));
+		dialog()->registerWidgetHelp(m_osd.showStatusIndicators, tr("Show Status Indicators"), tr("Checked"),
+			tr("Shows icon indicators for emulation states such as Pausing, Turbo, Fast-Forward, and Slow-Motion."));
 
 		dialog()->registerWidgetHelp(m_osd.showFrameTimes, tr("Show Frame Times"), tr("Unchecked"),
 			tr("Displays a graph showing the average frametimes."));
 
+		dialog()->registerWidgetHelp(m_osd.showHardwareInfo, tr("Show Hardware Info"), tr("Unchecked"),
+			tr("Shows the current system CPU and GPU information."));
+
 		dialog()->registerWidgetHelp(m_osd.showVersion, tr("Show PCSX2 Version"), tr("Unchecked"),
-			tr("Shows the current PCSX2 version on the top-right corner of the display."));
+			tr("Shows the current PCSX2 version."));
+
+		dialog()->registerWidgetHelp(m_osd.showSettings, tr("Show Settings"), tr("Unchecked"),
+			tr("Displays various settings and the current values of those settings in the bottom-right corner of the display."));
+
+		dialog()->registerWidgetHelp(m_osd.showPatches, tr("Show Patches"), tr("Unchecked"),
+			tr("Shows the amount of currently active patches/cheats in the bottom-right corner of the display."));
+
+		dialog()->registerWidgetHelp(m_osd.showInputs, tr("Show Inputs"), tr("Unchecked"),
+			tr("Shows the current controller state of the system in the bottom-left corner of the display."));
 
 		dialog()->registerWidgetHelp(m_osd.showVideoCapture, tr("Show Video Capture Status"), tr("Checked"),
-			tr("Shows the currently active video capture status."));
+			tr("Shows the status of the currently active video capture in the top-right corner of the display."));
 
 		dialog()->registerWidgetHelp(m_osd.showInputRec, tr("Show Input Recording Status"), tr("Checked"),
-			tr("Shows the currently active input recording status."));
+			tr("Shows the status of the currently active input recording in the top-right corner of the display."));
 
-		dialog()->registerWidgetHelp(m_osd.showHardwareInfo, tr("Show Hardware Info"), tr("Unchecked"),
-			tr("Shows the current system hardware information on the OSD."));
+		dialog()->registerWidgetHelp(m_osd.showTextureReplacements, tr("Show Texture Replacement Status"), tr("Unchecked"),
+			tr("Shows the status of the number of dumped and loaded texture replacements in the top-right corner of the display."));
 
 		dialog()->registerWidgetHelp(m_osd.warnAboutUnsafeSettings, tr("Warn About Unsafe Settings"), tr("Checked"),
 			tr("Displays warnings when settings are enabled which may break games."));
@@ -929,7 +929,7 @@ void GraphicsSettingsWidget::onFullscreenModeChanged(int index)
 
 void GraphicsSettingsWidget::onTrilinearFilteringChanged()
 {
-	const bool forced_bilinear = (dialog()->getEffectiveIntValue("EmuCore/GS", "TriFilter", static_cast<int>(TriFiltering::Automatic)) >=
+	const bool forced_bilinear = (dialog()->getEffectiveIntValue("EmuCore/GS", "TriFilter", static_cast<int>(Pcsx2Config::GSOptions::DEFAULT_TRILINEAR_FILTERING_MODE)) >=
 								  static_cast<int>(TriFiltering::Forced));
 	m_hw.textureFiltering->setDisabled(forced_bilinear);
 }
@@ -954,16 +954,16 @@ void GraphicsSettingsWidget::onPerformancePosChanged()
 {
 	const bool enabled = m_osd.performancePos->currentIndex() != (dialog()->isPerGameSettings() ? 1 : 0);
 
-	m_osd.showVPS->setEnabled(enabled);
-	m_osd.showSpeed->setEnabled(enabled);
+	m_osd.showSpeedPercentages->setEnabled(enabled);
 	m_osd.showFPS->setEnabled(enabled);
-	m_osd.showCPU->setEnabled(enabled);
-	m_osd.showGPU->setEnabled(enabled);
+	m_osd.showVPS->setEnabled(enabled);
 	m_osd.showResolution->setEnabled(enabled);
 	m_osd.showGSStats->setEnabled(enabled);
-	m_osd.showHardwareInfo->setEnabled(enabled);
-	m_osd.showIndicators->setEnabled(enabled);
+	m_osd.showUsageCPU->setEnabled(enabled);
+	m_osd.showUsageGPU->setEnabled(enabled);
+	m_osd.showStatusIndicators->setEnabled(enabled);
 	m_osd.showFrameTimes->setEnabled(enabled);
+	m_osd.showHardwareInfo->setEnabled(enabled);
 	m_osd.showVersion->setEnabled(enabled);
 }
 
@@ -981,13 +981,12 @@ void GraphicsSettingsWidget::onTextureReplacementChanged()
 	m_texture.precacheTextureReplacements->setEnabled(enabled);
 }
 
-
 void GraphicsSettingsWidget::onCaptureContainerChanged()
 {
 	const std::string container(
 		dialog()->getEffectiveStringValue("EmuCore/GS", "CaptureContainer", Pcsx2Config::GSOptions::DEFAULT_CAPTURE_CONTAINER));
 
-	m_capture.videoCaptureCodec->disconnect();
+	QObject::disconnect(m_capture.videoCaptureCodec, &QComboBox::currentIndexChanged, nullptr, nullptr);
 	m_capture.videoCaptureCodec->clear();
 	//: This string refers to a default codec, whether it's an audio codec or a video codec.
 	m_capture.videoCaptureCodec->addItem(tr("Default"), QString());
@@ -1002,7 +1001,7 @@ void GraphicsSettingsWidget::onCaptureContainerChanged()
 		dialog()->getSettingsInterface(), m_capture.videoCaptureCodec, "EmuCore/GS", "VideoCaptureCodec");
 	connect(m_capture.videoCaptureCodec, &QComboBox::currentIndexChanged, this, &GraphicsSettingsWidget::onCaptureCodecChanged);
 
-	m_capture.audioCaptureCodec->disconnect();
+	QObject::disconnect(m_capture.audioCaptureCodec, &QComboBox::currentIndexChanged, nullptr, nullptr);
 	m_capture.audioCaptureCodec->clear();
 	m_capture.audioCaptureCodec->addItem(tr("Default"), QString());
 	for (const auto& [format, name] : GSCapture::GetAudioCodecList(container.c_str()))
@@ -1018,7 +1017,7 @@ void GraphicsSettingsWidget::onCaptureContainerChanged()
 
 void GraphicsSettingsWidget::GraphicsSettingsWidget::onCaptureCodecChanged()
 {
-	m_capture.videoCaptureFormat->disconnect();
+	QObject::disconnect(m_capture.videoCaptureFormat, &QComboBox::currentIndexChanged, nullptr, nullptr);
 	m_capture.videoCaptureFormat->clear();
 	//: This string refers to a default pixel format
 	m_capture.videoCaptureFormat->addItem(tr("Default"), "");
@@ -1115,7 +1114,7 @@ void GraphicsSettingsWidget::updateRendererDependentOptions()
 	const bool is_software = (type == GSRendererType::SW);
 	const bool is_auto = (type == GSRendererType::Auto);
 	const bool is_vk = (type == GSRendererType::VK);
-	const bool is_disable_barriers = (type == GSRendererType::DX12 || type == GSRendererType::Metal || type == GSRendererType::SW);
+	const bool is_disable_barriers = (type == GSRendererType::Metal || type == GSRendererType::SW);
 	const bool hw_fixes = (is_hardware && m_hw.enableHWFixes && m_hw.enableHWFixes->checkState() == Qt::Checked);
 
 	QWidget* prev_tab;
@@ -1318,57 +1317,4 @@ void GraphicsSettingsWidget::onUpscaleMultiplierChanged()
 		data.isValid() ? std::optional<float>(data.toFloat()) : std::optional<float>());
 }
 
-void GraphicsSettingsWidget::resetManualHardwareFixes()
-{
-	bool changed = false;
-	{
-		auto lock = Host::GetSettingsLock();
-		SettingsInterface* const si = Host::Internal::GetBaseSettingsLayer();
-
-		auto check_bool = [&](const char* section, const char* key, bool expected) {
-			if (si->GetBoolValue(section, key, expected) != expected)
-			{
-				si->SetBoolValue(section, key, expected);
-				changed = true;
-			}
-		};
-		auto check_int = [&](const char* section, const char* key, s32 expected) {
-			if (si->GetIntValue(section, key, expected) != expected)
-			{
-				si->SetIntValue(section, key, expected);
-				changed = true;
-			}
-		};
-
-		check_bool("EmuCore/GS", "UserHacks", false);
-
-		check_int("EmuCore/GS", "UserHacks_CPUSpriteRenderBW", 0);
-		check_int("EmuCore/GS", "UserHacks_CPUCLUTRender", 0);
-		check_int("EmuCore/GS", "UserHacks_GPUTargetCLUTMode", 0);
-		check_int("EmuCore/GS", "UserHacks_SkipDraw_Start", 0);
-		check_int("EmuCore/GS", "UserHacks_SkipDraw_End", 0);
-		check_bool("EmuCore/GS", "UserHacks_AutoFlush", false);
-		check_bool("EmuCore/GS", "UserHacks_CPU_FB_Conversion", false);
-		check_bool("EmuCore/GS", "UserHacks_DisableDepthSupport", false);
-		check_bool("EmuCore/GS", "UserHacks_Disable_Safe_Features", false);
-		check_bool("EmuCore/GS", "UserHacks_DisableRenderFixes", false);
-		check_bool("EmuCore/GS", "preload_frame_with_gs_data", false);
-		check_bool("EmuCore/GS", "UserHacks_DisablePartialInvalidation", false);
-		check_int("EmuCore/GS", "UserHacks_TextureInsideRt", static_cast<int>(GSTextureInRtMode::Disabled));
-		check_bool("EmuCore/GS", "UserHacks_ReadTCOnClose", false);
-		check_bool("EmuCore/GS", "UserHacks_EstimateTextureRegion", false);
-		check_bool("EmuCore/GS", "paltex", false);
-		check_int("EmuCore/GS", "UserHacks_HalfPixelOffset", 0);
-		check_int("EmuCore/GS", "UserHacks_native_scaling", static_cast<int>(GSNativeScaling::Off));
-		check_int("EmuCore/GS", "UserHacks_round_sprite_offset", 0);
-		check_int("EmuCore/GS", "UserHacks_TCOffsetX", 0);
-		check_int("EmuCore/GS", "UserHacks_TCOffsetY", 0);
-		check_bool("EmuCore/GS", "UserHacks_align_sprite_X", false);
-		check_bool("EmuCore/GS", "UserHacks_merge_pp_sprite", false);
-		check_bool("EmuCore/GS", "UserHacks_ForceEvenSpritePosition", false);
-		check_bool("EmuCore/GS", "UserHacks_BilinearHack", false);
-	}
-
-	if (changed)
-		Host::CommitBaseSettingChanges();
-}
+#include "moc_GraphicsSettingsWidget.cpp"

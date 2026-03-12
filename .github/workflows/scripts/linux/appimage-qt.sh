@@ -41,19 +41,10 @@ BINARY=pcsx2-qt
 APPDIRNAME=PCSX2.AppDir
 STRIP=strip
 
-# Need both libharfbuzz.so and libharfbuzz.so.0 for bundled libs
-
 declare -a MANUAL_LIBS=(
 	"libshaderc_shared.so.1"
 	"libharfbuzz.so.0"
-	"libharfbuzz.so"
 	"libfreetype.so.6"
-)
-
-declare -a REMOVE_LIBS=(
-	'libwayland-client.so*'
-	'libwayland-cursor.so*'
-	'libwayland-egl.so*'
 )
 
 set -e
@@ -79,18 +70,6 @@ fi
 
 OUTDIR=$(realpath "./$APPDIRNAME")
 rm -fr "$OUTDIR"
-
-# Our deps build dosn't create libharfbuzz.so.0, so we have to symlink it here
-hbpath=$(find "$DEPSDIR" -name "libharfbuzz.so")
-if [ ! -f "$hbpath" ]; then
-	echo "Missing harfbuzz. Exiting."
-	exit 1
-fi
-
-if [ ! -f "$hbpath.0" ]; then
-	echo "Symlinking libharfbuzz.so.0"
-	ln -s "$hbpath" "$hbpath.0"
-fi
 
 echo "Locating extra libraries..."
 EXTRA_LIBS_ARGS=()
@@ -130,7 +109,7 @@ echo "Running linuxdeploy to create AppDir..."
 # Interestingly, specifying the module doesn't copy the module, only the required plugins for it
 # https://github.com/linuxdeploy/linuxdeploy-plugin-qt/issues/160#issuecomment-2655543893
 EXTRA_QT_MODULES="core;gui;svg;waylandclient;waylandcompositor;widgets;xcbqpa" \
-EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so" \
+EXTRA_PLATFORM_PLUGINS="libqwayland.so" \
 DEPLOY_PLATFORM_THEMES="1" \
 QMAKE="$DEPSDIR/bin/qmake" \
 NO_STRIP="1" \
@@ -139,16 +118,6 @@ $LINUXDEPLOY --plugin qt --appdir="$OUTDIR" --executable="$BUILDDIR/bin/pcsx2-qt
 
 echo "Copying resources into AppDir..."
 cp -a "$BUILDDIR/bin/resources" "$OUTDIR/usr/bin"
-
-# Why do we have to manually remove these libs? Because the linuxdeploy Qt plugin
-# copies them, not the "main" linuxdeploy binary, and plugins don't inherit the
-# include list...
-for lib in "${REMOVE_LIBS[@]}"; do
-	for libpath in $(find "$OUTDIR/usr/lib" -name "$lib"); do
-		echo "    Removing problematic library ${libpath}."
-		rm -f "$libpath"
-	done
-done
 
 # Restore unstripped deps (for cache).
 rm -fr "$DEPSDIR"

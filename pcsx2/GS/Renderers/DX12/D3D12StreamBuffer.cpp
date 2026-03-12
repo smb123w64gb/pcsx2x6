@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "GS/Renderers/DX12/D3D12StreamBuffer.h"
@@ -22,8 +22,8 @@ D3D12StreamBuffer::~D3D12StreamBuffer()
 
 bool D3D12StreamBuffer::Create(u32 size)
 {
-	const D3D12_RESOURCE_DESC resource_desc = {D3D12_RESOURCE_DIMENSION_BUFFER, 0, size, 1, 1, 1, DXGI_FORMAT_UNKNOWN,
-		{1, 0}, D3D12_TEXTURE_LAYOUT_ROW_MAJOR, D3D12_RESOURCE_FLAG_NONE};
+	const GSDevice12::D3D12_RESOURCE_DESCU resource_desc = {{D3D12_RESOURCE_DIMENSION_BUFFER, 0, size, 1, 1, 1, DXGI_FORMAT_UNKNOWN,
+		{1, 0}, D3D12_TEXTURE_LAYOUT_ROW_MAJOR, D3D12_RESOURCE_FLAG_NONE}};
 
 	D3D12MA::ALLOCATION_DESC allocationDesc = {};
 	allocationDesc.Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED;
@@ -31,8 +31,13 @@ bool D3D12StreamBuffer::Create(u32 size)
 
 	wil::com_ptr_nothrow<ID3D12Resource> buffer;
 	wil::com_ptr_nothrow<D3D12MA::Allocation> allocation;
-	HRESULT hr = GSDevice12::GetInstance()->GetAllocator()->CreateResource(&allocationDesc, &resource_desc,
-		D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, allocation.put(), IID_PPV_ARGS(buffer.put()));
+	HRESULT hr;
+	if (GSDevice12::GetInstance()->UseEnhancedBarriers())
+		hr = GSDevice12::GetInstance()->GetAllocator()->CreateResource3(&allocationDesc, &resource_desc.desc1,
+			D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, 0, nullptr, allocation.put(), IID_PPV_ARGS(buffer.put()));
+	else
+		hr = GSDevice12::GetInstance()->GetAllocator()->CreateResource(&allocationDesc, &resource_desc.desc,
+			D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, allocation.put(), IID_PPV_ARGS(buffer.put()));
 	pxAssertMsg(SUCCEEDED(hr), "Allocate buffer");
 	if (FAILED(hr))
 		return false;
@@ -192,20 +197,18 @@ bool D3D12StreamBuffer::WaitForClearSpace(u32 num_bytes)
 	u32 new_space = 0;
 	u32 new_gpu_position = 0;
 
-	auto iter = m_tracked_fences.begin();
-	for (; iter != m_tracked_fences.end(); ++iter)
-	{
+	auto iter = std::find_if(m_tracked_fences.begin(), m_tracked_fences.end(), [&, this](const auto& iter) {
 		// Would this fence bring us in line with the GPU?
 		// This is the "last resort" case, where a command buffer execution has been forced
 		// after no additional data has been written to it, so we can assume that after the
 		// fence has been signaled the entire buffer is now consumed.
-		u32 gpu_position = iter->second;
+		u32 gpu_position = iter.second;
 		if (m_current_offset == gpu_position)
 		{
 			new_offset = 0;
 			new_space = m_size;
 			new_gpu_position = 0;
-			break;
+			return true;
 		}
 
 		// Assuming that we wait for this fence, are we allocating in front of the GPU?
@@ -220,7 +223,7 @@ bool D3D12StreamBuffer::WaitForClearSpace(u32 num_bytes)
 				new_offset = m_current_offset;
 				new_space = m_size - m_current_offset;
 				new_gpu_position = gpu_position;
-				break;
+				return true;
 			}
 
 			// We can wrap around to the start, behind the GPU, if there is enough space.
@@ -231,7 +234,7 @@ bool D3D12StreamBuffer::WaitForClearSpace(u32 num_bytes)
 				new_offset = 0;
 				new_space = gpu_position;
 				new_gpu_position = gpu_position;
-				break;
+				return true;
 			}
 		}
 		else
@@ -246,10 +249,11 @@ bool D3D12StreamBuffer::WaitForClearSpace(u32 num_bytes)
 				new_offset = m_current_offset;
 				new_space = gpu_position - m_current_offset;
 				new_gpu_position = gpu_position;
-				break;
+				return true;
 			}
 		}
-	}
+		return false;
+	});
 
 	// Did any fences satisfy this condition?
 	// Has the command buffer been executed yet? If not, the caller should execute it.

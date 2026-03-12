@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "SettingsWidget.h"
@@ -114,3 +114,5 @@ void SettingsWidget::updateTabMargins(QScrollArea* scroll_area)
 		scroll_area->widget()->layout()->setContentsMargins(-1, -1, -1, -1);
 	}
 }
+
+#include "moc_SettingsWidget.cpp"

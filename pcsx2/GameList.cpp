@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "CDVD/CDVD.h"
@@ -16,6 +16,7 @@
 #include "common/HeterogeneousContainers.h"
 #include "common/Path.h"
 #include "common/ProgressCallback.h"
+#include "common/ScopedGuard.h"
 #include "common/StringUtil.h"
 
 #include <algorithm>
@@ -147,6 +148,44 @@ const char* GameList::RegionToString(Region region, bool translate)
 		name = TRANSLATE("GameList", name);
 
 	return name;
+}
+
+const char* GameList::RegionToFlagFilename(Region region)
+{
+	static constexpr std::array<const char*, static_cast<int>(Region::Count)> flag_names = {
+		"br",  // NTSC-B
+		"cn",  // NTSC-C
+		"hk",  // NTSC-HK
+		"jp",  // NTSC-J
+		"kr",  // NTSC-K
+		"tw",  // NTSC-T
+		"us",  // NTSC-U
+		"Other",  // Other
+		"au",  // PAL-A
+		"za",  // PAL-AF
+		"at",  // PAL-AU
+		"be",  // PAL-BE
+		"eu",  // PAL-E
+		"fr",  // PAL-F
+		"fi",  // PAL-FI
+		"de",  // PAL-G
+		"gr",  // PAL-GR
+		"it",  // PAL-I
+		"in",  // PAL-IN
+		"eu",  // PAL-M
+		"nl",  // PAL-NL
+		"no",  // PAL-NO
+		"pt",  // PAL-P
+		"pl",  // PAL-PL
+		"ru",  // PAL-R
+		"es",  // PAL-S
+		"scn",  // PAL-SC
+		"se",  // PAL-SW
+		"ch",  // PAL-SWI
+		"gb",  // PAL-UK
+	};
+
+	return flag_names.at(static_cast<int>(region));
 }
 
 const char* GameList::EntryCompatibilityRatingToString(CompatibilityRating rating, bool translate)
@@ -826,6 +865,15 @@ void GameList::Refresh(bool invalidate_cache, bool only_cache, ProgressCallback*
 	if (!progress)
 		progress = ProgressCallback::NullProgressCallback;
 
+	Error cdvd_lock_error;
+	if (!cdvdLock(&cdvd_lock_error))
+	{
+		progress->DisplayError(cdvd_lock_error.GetDescription().c_str());
+		return;
+	}
+
+	ScopedGuard unlock_cdvd = &cdvdUnlock;
+
 	if (invalidate_cache)
 		DeleteCacheFile();
 	else
@@ -1174,7 +1222,7 @@ std::string GameList::FormatTimestamp(std::time_t timestamp)
 	return ret;
 }
 
-std::string GameList::FormatTimespan(std::time_t timespan, bool long_format)
+std::string GameList::FormatTimespan(const std::time_t timespan, const bool long_format)
 {
 	const u32 hours = static_cast<u32>(timespan / 3600);
 	const u32 minutes = static_cast<u32>((timespan % 3600) / 60);
@@ -1198,8 +1246,10 @@ std::string GameList::FormatTimespan(std::time_t timespan, bool long_format)
 	{
 		if (hours > 0)
 			ret.assign(TRANSLATE_PLURAL_STR("GameList", "%n hours", "", hours));
-		else
+		else if (minutes > 0)
 			ret.assign(TRANSLATE_PLURAL_STR("GameList", "%n minutes", "", minutes));
+		else
+			ret.assign(TRANSLATE_PLURAL_STR("GameList", "%n seconds", "", seconds));
 	}
 
 	return ret;

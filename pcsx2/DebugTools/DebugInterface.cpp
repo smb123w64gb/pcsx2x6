@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "DebugInterface.h"
@@ -1039,7 +1039,7 @@ bool R3000DebugInterface::isValidAddress(u32 addr)
 		return true;
 	}
 
-	if (addr < 0x200000)
+	if (addr < Ps2MemSize::ExposedIopRam)
 	{
 		return true;
 	}

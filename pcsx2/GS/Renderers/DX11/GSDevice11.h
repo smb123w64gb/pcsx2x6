@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #pragma once
@@ -136,6 +136,8 @@ private:
 	bool m_using_flip_model_swap_chain = true;
 	bool m_using_allow_tearing = false;
 	bool m_is_exclusive_fullscreen = false;
+	bool m_conservative_depth = false;
+	bool m_rgba16_unorm_hw_blend = false;
 
 	struct
 	{
@@ -189,6 +191,7 @@ private:
 		wil::com_ptr_nothrow<ID3D11VertexShader> vs;
 		wil::com_ptr_nothrow<ID3D11PixelShader> ps[static_cast<int>(PresentShader::Count)];
 		wil::com_ptr_nothrow<ID3D11Buffer> ps_cb;
+		DisplayConstantBuffer cb_uniforms;
 	} m_present;
 
 	struct
@@ -196,12 +199,14 @@ private:
 		wil::com_ptr_nothrow<ID3D11PixelShader> ps[2];
 		wil::com_ptr_nothrow<ID3D11Buffer> cb;
 		wil::com_ptr_nothrow<ID3D11BlendState> bs;
+		MergeConstantBuffer cb_uniforms;
 	} m_merge;
 
 	struct
 	{
 		wil::com_ptr_nothrow<ID3D11PixelShader> ps[NUM_INTERLACE_SHADERS];
 		wil::com_ptr_nothrow<ID3D11Buffer> cb;
+		InterlaceConstantBuffer cb_uniforms;
 	} m_interlace;
 
 	wil::com_ptr_nothrow<ID3D11PixelShader> m_fxaa_ps;
@@ -210,6 +215,7 @@ private:
 	{
 		wil::com_ptr_nothrow<ID3D11PixelShader> ps;
 		wil::com_ptr_nothrow<ID3D11Buffer> cb;
+		float cb_uniforms[4];
 	} m_shadeboost;
 
 	struct
@@ -233,6 +239,7 @@ private:
 		wil::com_ptr_nothrow<ID3D11PixelShader> ps;
 		wil::com_ptr_nothrow<ID3D11BlendState> bs;
 		wil::com_ptr_nothrow<ID3D11Buffer> vs_cb;
+		GSVector4 vs_cb_uniforms[4];
 	} m_imgui;
 
 	// Shaders...
@@ -253,6 +260,10 @@ private:
 	D3D11ShaderCache m_shader_cache;
 	std::string m_tfx_source;
 
+protected:
+	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
+		GSHWDrawConfig::ColorMaskSelector cms, ShaderConvert shader, bool linear) override;
+
 public:
 	GSDevice11();
 	~GSDevice11() override;
@@ -269,7 +280,7 @@ public:
 	RenderAPI GetRenderAPI() const override;
 
 	bool UpdateWindow() override;
-	void ResizeWindow(s32 new_window_width, s32 new_window_height, float new_window_scale) override;
+	void ResizeWindow(u32 new_window_width, u32 new_window_height, float new_window_scale) override;
 	bool SupportsExclusiveFullscreen() const override;
 	bool HasSurface() const override;
 	void DestroySurface() override;
@@ -298,10 +309,8 @@ public:
 
 	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) override;
 
-	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvert shader = ShaderConvert::COPY, bool linear = true) override;
-	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ID3D11PixelShader* ps, ID3D11Buffer* ps_cb, bool linear = true);
-	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, bool red, bool green, bool blue, bool alpha, ShaderConvert shader = ShaderConvert::COPY) override;
-	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ID3D11PixelShader* ps, ID3D11Buffer* ps_cb, ID3D11BlendState* bs, bool linear = true);
+	void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ID3D11PixelShader* ps, ID3D11Buffer* ps_cb, bool linear);
+	void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ID3D11PixelShader* ps, ID3D11Buffer* ps_cb, ID3D11BlendState* bs, bool linear);
 	void PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, bool linear) override;
 	void UpdateCLUTTexture(GSTexture* sTex, float sScale, u32 offsetX, u32 offsetY, GSTexture* dTex, u32 dOffset, u32 dSize) override;
 	void ConvertToIndexedTexture(GSTexture* sTex, float sScale, u32 offsetX, u32 offsetY, u32 SBW, u32 SPSM, GSTexture* dTex, u32 DBW, u32 DPSM) override;
@@ -309,7 +318,7 @@ public:
 	void DrawMultiStretchRects(const MultiStretchRect* rects, u32 num_rects, GSTexture* dTex, ShaderConvert shader) override;
 	void DoMultiStretchRects(const MultiStretchRect* rects, u32 num_rects, const GSVector2& ds);
 
-	void SetupDATE(GSTexture* rt, GSTexture* ds, const GSVertexPT1* vertices, SetDATM datm);
+	void SetupDATE(GSTexture* rt, GSTexture* ds, SetDATM datm, const GSVector4i& bbox);
 
 	void* IAMapVertexBuffer(u32 stride, u32 count);
 	void IAUnmapVertexBuffer(u32 stride, u32 count);
@@ -337,6 +346,8 @@ public:
 	void OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector4i* scissor = nullptr, ID3D11DepthStencilView* read_only_dsv = nullptr);
 	void SetViewport(const GSVector2i& viewport);
 	void SetScissor(const GSVector4i& scissor);
+
+	void UpdateSubresource(ID3D11Buffer* buffer, const void* cb_uniforms, void* cached_cb_uniforms, size_t cb_uniforms_size);
 
 	void SetupVS(VSSelector sel, const GSHWDrawConfig::VSConstantBuffer* cb);
 	void SetupPS(const PSSelector& sel, const GSHWDrawConfig::PSConstantBuffer* cb, PSSamplerSelector ssel);

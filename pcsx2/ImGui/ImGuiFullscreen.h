@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #pragma once
 
 #include "common/Pcsx2Defs.h"
 
-#include "IconsFontAwesome6.h"
+#include "IconsFontAwesome.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 
@@ -28,8 +28,8 @@ namespace ImGuiFullscreen
 
 	static constexpr float LAYOUT_SCREEN_WIDTH = 1280.0f;
 	static constexpr float LAYOUT_SCREEN_HEIGHT = 720.0f;
-	static constexpr float LAYOUT_LARGE_FONT_SIZE = 26.0f;
-	static constexpr float LAYOUT_MEDIUM_FONT_SIZE = 16.0f;
+	static constexpr float LAYOUT_LARGE_FONT_SIZE = 22.0f;
+	static constexpr float LAYOUT_MEDIUM_FONT_SIZE = 14.0f;
 	static constexpr float LAYOUT_SMALL_FONT_SIZE = 10.0f;
 	static constexpr float LAYOUT_MENU_BUTTON_HEIGHT = 50.0f;
 	static constexpr float LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY = 26.0f;
@@ -71,6 +71,9 @@ namespace ImGuiFullscreen
 	static __fi float LayoutScale(float v) { return ImCeil(g_layout_scale * v); }
 	static __fi ImVec2 LayoutScale(const ImVec2& v) { return ImVec2(ImCeil(v.x * g_layout_scale), ImCeil(v.y * g_layout_scale)); }
 	static __fi ImVec2 LayoutScale(float x, float y) { return ImVec2(ImCeil(x * g_layout_scale), ImCeil(y * g_layout_scale)); }
+	/// Get the height of a line of text including the space to the next line.
+	/// Matches the result returned by CalcTextSizeA for one line of text.
+	static __fi float GetLineHeight(std::pair<ImFont*, float> font) { return ImCeil(font.second * font.first->LineHeight); }
 
 	static __fi float LayoutUnscale(float v) { return ImCeil(g_rcp_layout_scale * v); }
 	static __fi ImVec2 LayoutUnscale(const ImVec2& v) { return ImVec2(ImCeil(v.x * g_rcp_layout_scale), ImCeil(v.y * g_rcp_layout_scale)); }
@@ -165,6 +168,8 @@ namespace ImGuiFullscreen
 	void CreateFooterTextString(SmallStringBase& dest, std::span<const std::pair<const char*, std::string_view>> items);
 	void SetFullscreenFooterText(std::string_view text);
 	void SetFullscreenFooterText(std::span<const std::pair<const char*, std::string_view>> items);
+	void AppendToFullscreenFooterText(std::span<const std::pair<const char*, std::string_view>> items);
+	void QueueFooterHint(std::span<const std::pair<const char*, std::string_view>> items);
 	void DrawFullscreenFooter();
 
 	void PrerenderMenuButtonBorder();
@@ -255,19 +260,27 @@ namespace ImGuiFullscreen
 
 	using InputStringDialogCallback = std::function<void(std::string text)>;
 	bool IsInputDialogOpen();
+	enum class InputFilterType : u8
+	{
+		None,
+		Numeric,
+		IPAddress
+	};
+
 	void OpenInputStringDialog(
-		std::string title, std::string message, std::string caption, std::string ok_button_text, InputStringDialogCallback callback);
+		std::string title, std::string message, std::string caption, std::string ok_button_text, InputStringDialogCallback callback,
+		std::string default_value = std::string(), InputFilterType filter_type = InputFilterType::None);
 	void CloseInputDialog();
 
 	using ConfirmMessageDialogCallback = std::function<void(bool)>;
 	using InfoMessageDialogCallback = std::function<void()>;
 	using MessageDialogCallback = std::function<void(s32)>;
 	bool IsMessageBoxDialogOpen();
-	void OpenConfirmMessageDialog(std::string title, std::string message, ConfirmMessageDialogCallback callback,
+	void OpenConfirmMessageDialog(std::string title, std::string message, ConfirmMessageDialogCallback callback, bool default_yes = true,
 		std::string yes_button_text = ICON_FA_CHECK " Yes", std::string no_button_text = ICON_FA_XMARK " No");
 	void OpenInfoMessageDialog(std::string title, std::string message, InfoMessageDialogCallback callback = {},
 		std::string button_text = ICON_FA_SQUARE_XMARK " Close");
-	void OpenMessageDialog(std::string title, std::string message, MessageDialogCallback callback, std::string first_button_text,
+	void OpenMessageDialog(std::string title, std::string message, MessageDialogCallback callback, s32 default_index, std::string first_button_text,
 		std::string second_button_text, std::string third_button_text);
 	void CloseMessageDialog();
 
@@ -276,9 +289,9 @@ namespace ImGuiFullscreen
 	void SetNotificationVerticalPosition(float position, float direction);
 	void SetNotificationPosition(float horizontal_position, float vertical_position, float direction);
 
-	void OpenBackgroundProgressDialog(const char* str_id, std::string message, s32 min, s32 max, s32 value);
-	void UpdateBackgroundProgressDialog(const char* str_id, std::string message, s32 min, s32 max, s32 value);
-	void CloseBackgroundProgressDialog(const char* str_id);
+	void OpenProgressDialog(const char* str_id, std::string message, s32 min, s32 max, s32 value);
+	void UpdateProgressDialog(const char* str_id, std::string message, s32 min, s32 max, s32 value);
+	void CloseProgressDialog(const char* str_id);
 
 	void AddNotification(std::string key, float duration, std::string title, std::string text, std::string image_path);
 	void ClearNotifications();

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 //////////////////////////////////////////////////////////////////////
@@ -288,6 +288,7 @@ void main()
 #define PS_DITHER 0
 #define PS_DITHER_ADJUST 0
 #define PS_ZCLAMP 0
+#define PS_ZFLOOR 0
 #define PS_FEEDBACK_LOOP 0
 #define PS_TEX_IS_FB 0
 #endif
@@ -315,6 +316,7 @@ layout(std140, set = 0, binding = 1) uniform cb1
 	vec4 LODParams;
 	vec4 STRange;
 	ivec4 ChannelShuffle;
+	vec2 ChannelShuffleOffset;
 	vec2 TC_OffsetHack;
 	vec2 STScale;
 	mat4 DitherMatrix;
@@ -357,6 +359,10 @@ layout(set = 1, binding = 1) uniform texture2D Palette;
 
 #if PS_DATE > 0
 layout(set = 1, binding = 3) uniform texture2D PrimMinTexture;
+#endif
+
+#if PS_ZFLOOR || PS_ZCLAMP
+layout(depth_less) out float gl_FragDepth;
 #endif
 
 #if NEEDS_TEX
@@ -550,14 +556,14 @@ mat4 sample_4p(uvec4 u)
 	return c;
 }
 
-int fetch_raw_depth(ivec2 xy)
+uint fetch_raw_depth(ivec2 xy)
 {
 #if PS_TEX_IS_FB
 	vec4 col = sample_from_rt();
 #else
 	vec4 col = texelFetch(Texture, xy, 0);
 #endif
-	return int(col.r * exp2(32.0f));
+	return uint(col.r * exp2(32.0f));
 }
 
 vec4 fetch_raw_color(ivec2 xy)
@@ -636,10 +642,10 @@ vec4 sample_depth(vec2 st, ivec2 pos)
 	#if (PS_TALES_OF_ABYSS_HLE == 1)
 	{
 		// Warning: UV can't be used in channel effect
-		int depth = fetch_raw_depth(pos);
+		uint depth = fetch_raw_depth(pos);
 
 		// Convert msb based on the palette
-		t = texelFetch(Palette, ivec2((depth >> 8) & 0xFF, 0), 0) * 255.0f;
+		t = texelFetch(Palette, ivec2((depth >> 8u) & 0xFFu, 0), 0) * 255.0f;
 	}
 	#elif (PS_URBAN_CHAOS_HLE == 1)
 	{
@@ -650,13 +656,13 @@ vec4 sample_depth(vec2 st, ivec2 pos)
 		// To be faster both steps (msb&lsb) are done in a single pass.
 
 		// Warning: UV can't be used in channel effect
-		int depth = fetch_raw_depth(pos);
+		uint depth = fetch_raw_depth(pos);
 
 		// Convert lsb based on the palette
-		t = texelFetch(Palette, ivec2(depth & 0xFF, 0), 0) * 255.0f;
+		t = texelFetch(Palette, ivec2(depth & 0xFFu, 0), 0) * 255.0f;
 
 		// Msb is easier
-		float green = float(((depth >> 8) & 0xFF) * 36.0f);
+		float green = float(((depth >> 8u) & 0xFFu) * 36.0f);
 		green = min(green, 255.0f);
 		t.g += green;
 	}
@@ -709,7 +715,7 @@ vec4 fetch_red(ivec2 xy)
 	vec4 rt;
 
 	#if (PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2)
-		int depth = (fetch_raw_depth(xy)) & 0xFF;
+		uint depth = (fetch_raw_depth(xy)) & 0xFFu;
 		rt = vec4(float(depth) / 255.0f);
 	#else
 		rt = fetch_raw_color(xy);
@@ -723,7 +729,7 @@ vec4 fetch_green(ivec2 xy)
 	vec4 rt;
 
 	#if (PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2)
-		int depth = (fetch_raw_depth(xy) >> 8) & 0xFF;
+		uint depth = (fetch_raw_depth(xy) >> 8u) & 0xFFu;
 		rt = vec4(float(depth) / 255.0f);
 	#else
 		rt = fetch_raw_color(xy);
@@ -737,7 +743,7 @@ vec4 fetch_blue(ivec2 xy)
 	vec4 rt;
 
 	#if (PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2)
-		int depth = (fetch_raw_depth(xy) >> 16) & 0xFF;
+		uint depth = (fetch_raw_depth(xy) >> 16u) & 0xFFu;
 		rt = vec4(float(depth) / 255.0f);
 	#else
 		rt = fetch_raw_color(xy);
@@ -762,8 +768,8 @@ vec4 fetch_rgb(ivec2 xy)
 vec4 fetch_gXbY(ivec2 xy)
 {
 	#if (PS_DEPTH_FMT == 1) || (PS_DEPTH_FMT == 2)
-		int depth = fetch_raw_depth(xy);
-		int bg = (depth >> (8 + ChannelShuffle.w)) & 0xFF;
+		uint depth = fetch_raw_depth(xy);
+		uint bg = (depth >> (8u + uint(ChannelShuffle.w))) & 0xFFu;
 		return vec4(bg);
 	#else
 		ivec4 rt = ivec4(fetch_raw_color(xy) * 255.0);
@@ -906,7 +912,7 @@ bool atst(vec4 C)
 vec4 fog(vec4 c, float f)
 {
 	#if PS_FOG
-		c.rgb = trunc(mix(FogColor, c.rgb, f));
+		c.rgb = trunc(mix(FogColor, c.rgb, (f * 255.0f) / 256.0f));
 	#endif
 
 	return c;
@@ -925,17 +931,17 @@ vec4 ps_color()
 #if !NEEDS_TEX
 	vec4 T = vec4(0.0f);
 #elif PS_CHANNEL_FETCH == 1
-	vec4 T = fetch_red(ivec2(gl_FragCoord.xy));
+	vec4 T = fetch_red(ivec2(gl_FragCoord.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 2
-	vec4 T = fetch_green(ivec2(gl_FragCoord.xy));
+	vec4 T = fetch_green(ivec2(gl_FragCoord.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 3
-	vec4 T = fetch_blue(ivec2(gl_FragCoord.xy));
+	vec4 T = fetch_blue(ivec2(gl_FragCoord.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 4
-	vec4 T = fetch_alpha(ivec2(gl_FragCoord.xy));
+	vec4 T = fetch_alpha(ivec2(gl_FragCoord.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 5
-	vec4 T = fetch_rgb(ivec2(gl_FragCoord.xy));
+	vec4 T = fetch_rgb(ivec2(gl_FragCoord.xy + ChannelShuffleOffset));
 #elif PS_CHANNEL_FETCH == 6
-	vec4 T = fetch_gXbY(ivec2(gl_FragCoord.xy));
+	vec4 T = fetch_gXbY(ivec2(gl_FragCoord.xy + ChannelShuffleOffset));
 #elif PS_DEPTH_FMT > 0
 	vec4 T = sample_depth(st_int, ivec2(gl_FragCoord.xy));
 #else
@@ -1400,8 +1406,16 @@ void main()
 		#endif
 	#endif
 
+	#if PS_ZFLOOR
+		float depth_value = floor(gl_FragCoord.z * exp2(32.0f)) * exp2(-32.0f);;
+	#else
+		float depth_value = gl_FragCoord.z;
+	#endif
+	
 	#if PS_ZCLAMP
 		gl_FragDepth = min(gl_FragCoord.z, MaxDepthPS);
+	#elif PS_ZFLOOR
+		gl_FragDepth = depth_value;
 	#endif
 
 #endif // PS_DATE

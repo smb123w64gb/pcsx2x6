@@ -7,6 +7,10 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
+# The bundled ffmpeg has a lot of things disabled to reduce code size.
+# Users may want to use system ffmpeg for additional features
+: ${BUILD_FFMPEG:=0}
+
 SCRIPTDIR=$(realpath $(dirname "${BASH_SOURCE[0]}"))
 NPROCS="$(getconf _NPROCESSORS_ONLN)"
 INSTALLDIR="$1"
@@ -14,54 +18,65 @@ if [ "${INSTALLDIR:0:1}" != "/" ]; then
 	INSTALLDIR="$PWD/$INSTALLDIR"
 fi
 
-FREETYPE=2.14.1
-HARFBUZZ=12.0.0
-LIBBACKTRACE=ad106d5fdd5d960bd33fae1c48a351af567fd075
-LIBJPEGTURBO=3.1.2
-LIBPNG=1.6.50
-LIBWEBP=1.6.0
-SDL=SDL3-3.2.24
-QT=6.9.2
+QT=6.10.2
 QTAPNG=1.3.0
+
+FFMPEG=8.0
+FREETYPE=2.14.1
+HARFBUZZ=13.0.0
+LIBBACKTRACE=ad106d5fdd5d960bd33fae1c48a351af567fd075
+LIBJPEGTURBO=3.1.3
+LIBPNG=1.6.55
+LIBWEBP=1.6.0
+NVENC=13.0.19.0
+SDL=SDL3-3.4.2
 LZ4=1.10.0
+VULKAN=1.4.328.1
 ZSTD=1.5.7
-KDDOCKWIDGETS=2.3.0
-PLUTOVG=1.3.1
+KDDOCKWIDGETS=2.4.0
+PLUTOVG=1.3.2
 PLUTOSVG=0.0.7
 
-SHADERC=2025.3
-SHADERC_GLSLANG=efd24d75bcbc55620e759f6bf42c45a32abac5f8
-SHADERC_SPIRVHEADERS=2a611a970fdbc41ac2e3e328802aed9985352dca
-SHADERC_SPIRVTOOLS=33e02568181e3312f49a3cf33df470bf96ef293a
+SHADERC=2026.1
+SHADERC_GLSLANG=f0bd0257c308b9a26562c1a30c4748a0219cc951
+SHADERC_SPIRVHEADERS=04f10f650d514df88b76d25e83db360142c7b174
+SHADERC_SPIRVTOOLS=fbe4f3ad913c44fe8700545f8ffe35d1382b7093
 
 mkdir -p deps-build
 cd deps-build
 
+export PKG_CONFIG_PATH="$INSTALLDIR/lib/pkgconfig:$PKG_CONFIG_PATH"
+
 cat > SHASUMS <<EOF
-32427e8c471ac095853212a37aef816c60b42052d4d9e48230bab3bdf2936ccc  freetype-$FREETYPE.tar.xz
-c4a398539c3e0fdc9a82dfe7824d0438cae78c1e2124e7c6ada3dfa600cdb6c8  harfbuzz-$HARFBUZZ.tar.gz
-fd6f417fe9e3a071cf1424a5152d926a34c4a3c5070745470be6cf12a404ed79  $LIBBACKTRACE.zip
-8f0012234b464ce50890c490f18194f913a7b1f4e6a03d6644179fa0f867d0cf  libjpeg-turbo-$LIBJPEGTURBO.tar.gz
-4df396518620a7aa3651443e87d1b2862e4e88cad135a8b93423e01706232307  libpng-$LIBPNG.tar.xz
-e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564  libwebp-$LIBWEBP.tar.gz
-81cc0fc17e5bf2c1754eeca9af9c47a76789ac5efdd165b3b91cbbe4b90bfb76  $SDL.tar.gz
-687ddc0c7cb128a3ea58e159b5129252537c27ede0c32a93f11f03127f0c0165  libpng-$LIBPNG-apng.patch.gz
-537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b  lz4-$LZ4.tar.gz
-eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  zstd-$ZSTD.tar.gz
-44be9c9ecfe04129c4dea0a7e1b36ad476c9cc07c292016ac98e7b41514f2440  qtbase-everywhere-src-$QT.tar.xz
-8a023f7e2f57dedc02e2ab10c975f7cb3cccac9b8f0823c12fd6824834549139  qtimageformats-everywhere-src-$QT.tar.xz
-d984cab8f26334aa1c15e5b8f0cd9f1b7c0c1289fe0b68c1c84ab469b75605a5  qtsvg-everywhere-src-$QT.tar.xz
-d8b7f7e8e970cc0b975205fd6d5832ea917ef3e751df69b97439c1cddd67a489  qttools-everywhere-src-$QT.tar.xz
-c73bb6281ed365c0f954f4b1b6e1b13e1b3fefd94854f46fcd9a412f641f7ed6  qttranslations-everywhere-src-$QT.tar.xz
-cad79806565568f12f9983fed69219416abcee9d5deef4abdfcf94aa2eef7781  qtwayland-everywhere-src-$QT.tar.xz
+aeb78d29291a2b5fd53cb55950f8f5065b4978c25fb1d77f627d695ab9adf21e  qtbase-everywhere-src-$QT.tar.xz
+8b8f9c718638081e7b3c000e7f31910140b1202a98e98df5d1b496fe6f639d67  qtimageformats-everywhere-src-$QT.tar.xz
+f07ff80f38caf235187200345392ca7479445ddf49a36c3694cd52a735dad6e1  qtsvg-everywhere-src-$QT.tar.xz
+1e3d2c07c1fd76d2425c6eaeeaa62ffaff5f79210c4e1a5bc2a6a9db668d5b24  qttools-everywhere-src-$QT.tar.xz
+b3b3813bc9d76b545716dc8b6e659fa71b6e2bc14569e9fab6dab8b30650a644  qttranslations-everywhere-src-$QT.tar.xz
+391998eb432719df26a6a67d8efdc67f8bf2afdd76c1ee3381ebff4fe7527ee2  qtwayland-everywhere-src-$QT.tar.xz
 f1d3be3489f758efe1a8f12118a212febbe611aa670af32e0159fa3c1feab2a6  QtApng-$QTAPNG.tar.gz
-a8e4a25e5c2686fd36981e527ed05e451fcfc226bddf350f4e76181371190937  shaderc-$SHADERC.tar.gz
-9427deccbdf4bde6a269938df38c6bd75247493786a310d8d733a2c82065ef47  shaderc-glslang-$SHADERC_GLSLANG.tar.gz
-c2225a49c3d7efa5c4f4ce4a6b42081e6ea3daca376f3353d9d7c2722d77a28a  shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz
-44d1005880c583fc00a0fb41c839214c68214b000ea8dcb54d352732fee600ff  shaderc-spirv-tools-$SHADERC_SPIRVTOOLS.tar.gz
-843baf9e1812c1ab82fd81d85b57cbc0d29bb43245efeb2539039780004b1056  KDDockWidgets-$KDDOCKWIDGETS.tar.gz
-bea672eb96ee36c2cbeb911b9bac66dfe989b3ad9a9943101e00aeb2df2aefdb  plutovg-$PLUTOVG.tar.gz
+
+b2751fccb6cc4c77708113cd78b561059b6fa904b24162fa0be2d60273d27b8e  ffmpeg-$FFMPEG.tar.xz
+32427e8c471ac095853212a37aef816c60b42052d4d9e48230bab3bdf2936ccc  freetype-$FREETYPE.tar.xz
+207f96964dc9475b13c1f66565bf145d2658089d65b4cf786d351da2857fc269  harfbuzz-$HARFBUZZ.tar.gz
+fd6f417fe9e3a071cf1424a5152d926a34c4a3c5070745470be6cf12a404ed79  $LIBBACKTRACE.zip
+075920b826834ac4ddf97661cc73491047855859affd671d52079c6867c1c6c0  libjpeg-turbo-$LIBJPEGTURBO.tar.gz
+d925722864837ad5ae2a82070d4b2e0603dc72af44bd457c3962298258b8e82d  libpng-$LIBPNG.tar.xz
+e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564  libwebp-$LIBWEBP.tar.gz
+ef39a2e3f9a8a78296c40da701967dd1b0d0d6e267e483863ce70f8a03b4050c  $SDL.tar.gz
+017c06f75ffed25f6cda9b5369ec6da0ac35a6616adf7abe4222516a0237f37a  libpng-$LIBPNG-apng.patch.gz
+537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b  lz4-$LZ4.tar.gz
+13da39edb3a40ed9713ae390ca89faa2f1202c9dda869ef306a8d4383e242bee  nv-codec-headers-$NVENC.tar.gz
+c465aa56757e7746ac707f582b6e2d51546569a4a2488c1172fb543aa5fdfc2c  vulkan-sdk-$VULKAN.tar.gz
+eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  zstd-$ZSTD.tar.gz
+51dbf24fe72e43dd7cb9a289d3cab47112010f1a2ed69b6fc8ac0dff31991ed2  KDDockWidgets-$KDDOCKWIDGETS.tar.gz
+7bd4e79ce18b1d47517e7e91fbb7cf19d4f01942804a519bc7c0bf32b6325dd5  plutovg-$PLUTOVG.tar.gz
 78561b571ac224030cdc450ca2986b4de915c2ba7616004a6d71a379bffd15f3  plutosvg-$PLUTOSVG.tar.gz
+
+245002feccbe7f8361b223545a5654cea69780745886872d7efff50a38d96c66  shaderc-$SHADERC.tar.gz
+bd58dca4dac67dcf7640292d7d63e0416274d40ee2200f7301878cec11ac6647  shaderc-glslang-$SHADERC_GLSLANG.tar.gz
+1b220e3eec1714f0451b0e3652979bd280edf10893f617837b88e6359a804ded  shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz
+cabb35f4eef0da3ef72ad9edd596af4191d7507a8f35c05df526d2d5ff889f59  shaderc-spirv-tools-$SHADERC_SPIRVTOOLS.tar.gz
 EOF
 
 curl -L \
@@ -75,6 +90,9 @@ curl -L \
 	-O "https://github.com/lz4/lz4/releases/download/v$LZ4/lz4-$LZ4.tar.gz" \
 	-O "https://libsdl.org/release/$SDL.tar.gz" \
 	-O "https://github.com/facebook/zstd/releases/download/v$ZSTD/zstd-$ZSTD.tar.gz" \
+	-O "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/vulkan-sdk-$VULKAN.tar.gz" \
+	-O "https://github.com/FFmpeg/nv-codec-headers/releases/download/n$NVENC/nv-codec-headers-$NVENC.tar.gz" \
+	-O "https://ffmpeg.org/releases/ffmpeg-$FFMPEG.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qtbase-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qtimageformats-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qtsvg-everywhere-src-$QT.tar.xz" \
@@ -92,11 +110,42 @@ curl -L \
 
 shasum -a 256 --check SHASUMS
 
+if [ "$BUILD_FFMPEG" -ne 0 ]; then
+	echo "Installing vulkan headers..."
+	rm -fr "Vulkan-Headers-vulkan-sdk-$VULKAN"
+	tar xf "vulkan-sdk-$VULKAN.tar.gz"
+	cd "Vulkan-Headers-vulkan-sdk-$VULKAN"
+	cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR"
+	make -C build install
+	cd ..
+
+	echo "Installing nvenc headers..."
+	rm -fr "nv-codec-headers-$NVENC"
+	tar xf "nv-codec-headers-$NVENC.tar.gz"
+	make -C "nv-codec-headers-$NVENC" PREFIX="$INSTALLDIR" install
+
+	echo "Installing FFmpeg..."
+	rm -fr "ffmpeg-$FFMPEG"
+	tar xf "ffmpeg-$FFMPEG.tar.xz"
+	cd "ffmpeg-$FFMPEG"
+	CFLAGS="-Os $CFLAGS" CXXFLAGS="-Os $CXXFLAGS" \
+		./configure --prefix="$INSTALLDIR" \
+		--disable-all --disable-autodetect --disable-static --enable-shared \
+		--enable-avcodec --enable-avformat --enable-avutil --enable-swresample --enable-swscale \
+		--enable-gpl --enable-libx264 --enable-libopus --enable-vulkan --enable-ffnvcodec --enable-nvenc --enable-vaapi --enable-libvpl \
+		--enable-encoder=ffv1,qtrle,libx264*,aac,flac,libopus,pcm_s16be,pcm_s16le,*_vulkan,*_qsv,*_nvenc,*_vaapi \
+		--enable-muxer=avi,matroska,mov,mp3,mp4,wav \
+		--enable-protocol=file
+	make "-j$NPROCS"
+	make install
+	cd ..
+fi
+
 echo "Building libbacktrace..."
 rm -fr "libbacktrace-$LIBBACKTRACE"
 unzip "$LIBBACKTRACE.zip"
 cd "libbacktrace-$LIBBACKTRACE"
-./configure --prefix="$INSTALLDIR"
+./configure --prefix="$INSTALLDIR" --with-pic
 make
 make install
 cd ..
@@ -116,7 +165,9 @@ echo "Building libjpegturbo..."
 rm -fr "libjpeg-turbo-$LIBJPEGTURBO"
 tar xf "libjpeg-turbo-$LIBJPEGTURBO.tar.gz"
 cd "libjpeg-turbo-$LIBJPEGTURBO"
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DENABLE_STATIC=OFF -DENABLE_SHARED=ON -B build -G Ninja
+# On non debian or debian based Linux systems, libjpeg-turbo will set CMAKE_INSTALL_DEFAULT_LIBDIR "lib64" (or libx32)
+# That will prevent CMake from finding the deps libjpeg later on. if we set CMAKE_INSTALL_DEFAULT_LIBDIR, libjpeg-turbo will leave it as is, so set it to "lib"
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DENABLE_STATIC=OFF -DENABLE_SHARED=ON -DCMAKE_INSTALL_DEFAULT_LIBDIR="lib" -B build -G Ninja
 cmake --build build --parallel
 ninja -C build install
 cd ..
@@ -163,6 +214,8 @@ echo "Building HarfBuzz..."
 rm -fr "harfbuzz-$HARFBUZZ"
 tar xf "harfbuzz-$HARFBUZZ.tar.gz"
 cd "harfbuzz-$HARFBUZZ"
+# Add an SOVERSION to match system harfbuzz
+sed -i 's/PROPERTIES VISIBILITY_INLINES_HIDDEN TRUE)/PROPERTIES VISIBILITY_INLINES_HIDDEN TRUE SOVERSION 0)/g' CMakeLists.txt
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DHB_BUILD_UTILS=OFF -DHB_HAVE_FREETYPE=ON -B build -G Ninja
 cmake --build build --parallel
 ninja -C build install
@@ -181,7 +234,7 @@ echo "Building SDL..."
 rm -fr "$SDL"
 tar xf "$SDL.tar.gz"
 cd "$SDL"
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -G Ninja
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_X11_XSCRNSAVER=OFF -DSDL_TESTS=OFF -G Ninja
 cmake --build build --parallel
 ninja -C build install
 cd ..
@@ -197,7 +250,7 @@ tar xf "qtbase-everywhere-src-$QT.tar.xz"
 cd "qtbase-everywhere-src-$QT"
 mkdir build
 cd build
-../configure -prefix "$INSTALLDIR" -release -dbus-linked -gui -widgets -fontconfig -qt-doubleconversion -ssl -openssl-runtime -opengl desktop -qpa xcb,wayland -xkbcommon -xcb -gtk -- -DFEATURE_dbus=ON -DFEATURE_icu=OFF -DFEATURE_printsupport=OFF -DFEATURE_sql=OFF -DFEATURE_system_png=ON -DFEATURE_system_jpeg=ON -DFEATURE_system_zlib=ON -DFEATURE_system_freetype=ON -DFEATURE_system_harfbuzz=ON
+../configure -prefix "$INSTALLDIR" -release -dbus-linked -gui -widgets -fontconfig -qt-doubleconversion -ssl -openssl-runtime -opengl desktop -qpa xcb,wayland -xkbcommon -xcb -- --log-level=STATUS -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DFEATURE_dbus=ON -DFEATURE_icu=OFF -DFEATURE_printsupport=OFF -DFEATURE_sql=OFF -DFEATURE_system_png=ON -DFEATURE_system_jpeg=ON -DFEATURE_system_zlib=ON -DFEATURE_system_freetype=ON -DFEATURE_system_harfbuzz=ON -DFEATURE_gtk3=OFF
 cmake --build . --parallel
 ninja install
 cd ../../

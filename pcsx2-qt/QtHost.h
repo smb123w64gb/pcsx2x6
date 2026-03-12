@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #pragma once
@@ -28,7 +28,7 @@
 
 class SettingsInterface;
 
-class DisplayWidget;
+class DisplaySurface;
 struct VMBootParameters;
 
 enum class CDVD_SourceType : uint8_t;
@@ -69,7 +69,7 @@ public:
 
 	/// Called back from the GS thread when the display state changes (e.g. fullscreen, render to main).
 	std::optional<WindowInfo> acquireRenderWindow(bool recreate_window);
-	void connectDisplaySignals(DisplayWidget* widget);
+	void connectDisplaySignals(DisplaySurface* widget);
 	void releaseRenderWindow();
 
 	void startBackgroundControllerPollTimer();
@@ -77,7 +77,6 @@ public:
 	void updatePerformanceMetrics(bool force);
 
 public Q_SLOTS:
-	bool confirmMessage(const QString& title, const QString& message);
 	void loadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& lock);
 	void checkForSettingChanges(const Pcsx2Config& old_config);
 	void startFullscreenUI(bool fullscreen);
@@ -112,17 +111,15 @@ public Q_SLOTS:
 	void queueSnapshot(quint32 gsdump_frames);
 	void beginCapture(const QString& path);
 	void endCapture();
-	void setAudioOutputVolume(int volume, int fast_forward_volume);
-	void setAudioOutputMuted(bool muted);
 
 Q_SIGNALS:
-	bool messageConfirmed(const QString& title, const QString& message);
 	void statusMessage(const QString& message);
 
 	std::optional<WindowInfo> onAcquireRenderWindowRequested(bool recreate_window, bool fullscreen, bool render_to_main, bool surfaceless);
 	void onResizeRenderWindowRequested(qint32 width, qint32 height);
 	void onReleaseRenderWindowRequested();
 	void onMouseModeRequested(bool relative_mode, bool hide_cursor);
+	void onMouseLockRequested(bool state);
 	void onFullscreenUIStateChange(bool running);
 
 	/// Called when the VM is starting initialization, but has not been completed yet.
@@ -195,7 +192,7 @@ private:
 private Q_SLOTS:
 	void stopInThread();
 	void doBackgroundControllerPoll();
-	void onDisplayWindowResized(int width, int height, float scale);
+	void onDisplayWindowResized(u32 width, u32 height, float scale);
 	void onApplicationStateChanged(Qt::ApplicationState state);
 	void redrawDisplayWindow();
 
@@ -292,4 +289,10 @@ namespace QtHost
 
 	/// Compare strings in the locale of the current UI language
 	int LocaleSensitiveCompare(QStringView lhs, QStringView rhs);
+
+	/// Determines whether or not requests to enter/exit fullscreen mode should
+	/// be ignored. This is a hack so that we don't destroy a dialog box while
+	/// inside its exec function, which would cause a crash.
+	void LockVMWithDialog();
+	void UnlockVMWithDialog();
 } // namespace QtHost

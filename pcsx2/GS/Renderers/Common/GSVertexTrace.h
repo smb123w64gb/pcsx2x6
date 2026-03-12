@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #pragma once
@@ -54,6 +54,19 @@ public:
 		struct { u32 r:4, g:4, b:4, a:4, x:1, y:1, z:1, f:1, s:1, t:1, q:1, _pad:1; };
 		struct { u32 rgba:16, xyzf:4, stq:4; };
 	} m_eq = {};
+
+	union
+	{
+		struct
+		{
+			u32 s : 1;
+			u32 t : 1;
+			u32 _pad : 1;
+			u32 q : 1;
+			u32 _pad2 : 28;
+		};
+		u32 value;
+	} nan = {};
 
 	union
 	{

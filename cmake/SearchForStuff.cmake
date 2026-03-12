@@ -50,6 +50,7 @@ else()
 	include(CheckLib)
 
 	if(UNIX AND NOT APPLE)
+		find_package(Fontconfig REQUIRED)
 		if(LINUX)
 			check_lib(LIBUDEV libudev libudev.h)
 		endif()
@@ -108,20 +109,20 @@ disable_compiler_warnings_for_target(speex)
 
 # Find the Qt components that we need.
 if(ENABLE_QT_UI)
-	find_package(Qt6 6.7.3 COMPONENTS CoreTools Core GuiTools Gui WidgetsTools Widgets LinguistTools REQUIRED)
+	find_package(Qt6 6.10.1 COMPONENTS CoreTools Core GuiTools Gui WidgetsTools Widgets LinguistTools REQUIRED)
 
-	if(WIN32)
-		add_subdirectory(3rdparty/rainterface EXCLUDE_FROM_ALL)
+	if(NOT WIN32 AND NOT APPLE)
+		if (Qt6_VERSION VERSION_GREATER_EQUAL 6.10.0)
+			find_package(Qt6 COMPONENTS CorePrivate GuiPrivate WidgetsPrivate REQUIRED)
+		endif()
 	endif()
 
 	# The docking system for the debugger.
-	find_package(KDDockWidgets-qt6 2.0.0 REQUIRED)
-	# Add an extra include path to work around a broken include directive.
-	# TODO: Remove this the next time we update KDDockWidgets.
-	get_target_property(KDDOCKWIDGETS_INCLUDE_DIRECTORY KDAB::kddockwidgets INTERFACE_INCLUDE_DIRECTORIES)
-	target_include_directories(KDAB::kddockwidgets INTERFACE
-		${KDDOCKWIDGETS_INCLUDE_DIRECTORY}/kddockwidgets
-	)
+	find_package(KDDockWidgets-qt6 2.3.0 REQUIRED)
+endif()
+
+if(WIN32)
+	add_subdirectory(3rdparty/rainterface EXCLUDE_FROM_ALL)
 endif()
 
 # Demangler for the debugger.

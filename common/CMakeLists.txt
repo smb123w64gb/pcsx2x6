@@ -7,7 +7,6 @@ endif(NOT TOP_CMAKE_WAS_SOURCED)
 
 add_library(common)
 
-# x86emitter sources
 target_sources(common PRIVATE
 	AlignedMalloc.cpp
 	Assertions.cpp
@@ -20,6 +19,7 @@ target_sources(common PRIVATE
 	HostSys.cpp
 	Image.cpp
 	HTTPDownloader.cpp
+	MemoryInterface.cpp
 	MemorySettingsInterface.cpp
 	MD5Digest.cpp
 	PrecompiledHeader.cpp
@@ -34,9 +34,9 @@ target_sources(common PRIVATE
 	Timer.cpp
 	WAVWriter.cpp
 	WindowInfo.cpp
+	YAML.cpp
 )
 
-# x86emitter headers
 target_sources(common PRIVATE
 	AlignedMalloc.h
 	Assertions.h
@@ -59,6 +59,7 @@ target_sources(common PRIVATE
 	LRUCache.h
 	HeapArray.h
 	HTTPDownloader.h
+	MemoryInterface.h
 	MemorySettingsInterface.h
 	MD5Digest.h
 	MRCHelpers.h
@@ -81,6 +82,7 @@ target_sources(common PRIVATE
 	WAVWriter.h
 	WindowInfo.h
 	WrappedMemCopy.h
+	YAML.h
 )
 
 if(_M_X86)
@@ -208,6 +210,7 @@ target_link_libraries(common PRIVATE
 target_link_libraries(common PUBLIC
 	fmt::fmt
 	fast_float
+	rapidyaml::rapidyaml
 )
 
 fixup_file_properties(common)

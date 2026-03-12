@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "Common.h"
@@ -70,8 +70,8 @@ eeProfiler EE::Profiler;
 #define X86
 
 static DynamicHeapArray<u8, 4096> recRAMCopy;
-static DynamicHeapArray<u8, 4096> recLutReserve_RAM;
-static size_t recLutSize;
+static DynamicHeapArray<BASEBLOCK, 4096> recLutReserve_RAM;
+static size_t recLutEntries;
 static bool extraRam;
 
 static BASEBLOCK* recRAM = nullptr; // and the ptr to the blocks here
@@ -326,8 +326,8 @@ void recBranchCall(void (*func)())
 	// In order to make sure a branch test is performed, the nextBranchCycle is set
 	// to the current cpu cycle.
 
-	xMOV(eax, ptr[&cpuRegs.cycle]);
-	xMOV(ptr[&cpuRegs.nextEventCycle], eax);
+	xMOV(rax, ptr64[&cpuRegs.cycle]);
+	xMOV(ptr64[&cpuRegs.nextEventCycle], rax);
 
 	recCall(func);
 	g_branch = 2;
@@ -486,21 +486,22 @@ static void _DynGen_Dispatchers()
 
 static __ri void ClearRecLUT(BASEBLOCK* base, int memsize)
 {
-	for (int i = 0; i < memsize / (int)sizeof(uptr); i++)
+	for (int i = 0; i < memsize / 4; i++)
 		base[i].SetFnptr((uptr)JITCompile);
 }
 
 static void recReserveRAM()
 {
-	recLutSize = (Ps2MemSize::ExposedRam + Ps2MemSize::Rom + Ps2MemSize::Rom1 + Ps2MemSize::Rom2) * wordsize / 4;
+	// One entry per possible call target
+	recLutEntries = (Ps2MemSize::ExposedRam + Ps2MemSize::Rom + Ps2MemSize::Rom1 + Ps2MemSize::Rom2) / 4;
 
 	if (recRAMCopy.size() != Ps2MemSize::ExposedRam)
 		recRAMCopy.resize(Ps2MemSize::ExposedRam);
 
-	if (recLutReserve_RAM.size() != recLutSize)
-		recLutReserve_RAM.resize(recLutSize);
+	if (recLutReserve_RAM.size() != recLutEntries)
+		recLutReserve_RAM.resize(recLutEntries);
 
-	BASEBLOCK* basepos = reinterpret_cast<BASEBLOCK*>(recLutReserve_RAM.data());
+	BASEBLOCK* basepos = recLutReserve_RAM.data();
 	recRAM = basepos;
 	basepos += (Ps2MemSize::ExposedRam / 4);
 	recROM = basepos;
@@ -581,7 +582,8 @@ static void recResetRaw()
 	vtlb_DynGenDispatchers();
 	recPtr = xGetPtr();
 
-	ClearRecLUT(reinterpret_cast<BASEBLOCK*>(recLutReserve_RAM.data()), recLutSize);
+	ClearRecLUT(recLutReserve_RAM.data(),
+		Ps2MemSize::ExposedRam + Ps2MemSize::Rom + Ps2MemSize::Rom1 + Ps2MemSize::Rom2);
 	recRAMCopy.fill(0);
 
 	maxrecmem = 0;
@@ -1360,20 +1362,20 @@ static void iBranchTest(u32 newpc)
 
 	if (EmuConfig.Speedhacks.WaitLoop && s_nBlockFF && newpc == s_branchTo)
 	{
-		xMOV(eax, ptr32[&cpuRegs.nextEventCycle]);
-		xADD(ptr32[&cpuRegs.cycle], scaleblockcycles());
-		xCMP(eax, ptr32[&cpuRegs.cycle]);
-		xCMOVS(eax, ptr32[&cpuRegs.cycle]);
-		xMOV(ptr32[&cpuRegs.cycle], eax);
+		xMOV(rax, ptr64[&cpuRegs.nextEventCycle]);
+		xADD(ptr64[&cpuRegs.cycle], scaleblockcycles());
+		xCMP(rax, ptr64[&cpuRegs.cycle]);
+		xCMOVS(rax, ptr64[&cpuRegs.cycle]);
+		xMOV(ptr64[&cpuRegs.cycle], rax);
 
 		xJMP((void*)DispatcherEvent);
 	}
 	else
 	{
-		xMOV(eax, ptr[&cpuRegs.cycle]);
-		xADD(eax, scaleblockcycles());
-		xMOV(ptr[&cpuRegs.cycle], eax); // update cycles
-		xSUB(eax, ptr[&cpuRegs.nextEventCycle]);
+		xMOV(rax, ptr64[&cpuRegs.cycle]);
+		xADD(rax, scaleblockcycles());
+		xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+		xSUB(rax, ptr64[&cpuRegs.nextEventCycle]);
 
 		if (newpc == 0xffffffff)
 			xJS(DispatcherReg);
@@ -1498,7 +1500,10 @@ void dynarecCheckBreakpoint()
 {
 	u32 pc = cpuRegs.pc;
 	if (CBreakPoints::CheckSkipFirst(BREAKPOINT_EE, pc) != 0)
+	{
+		CBreakPoints::ClearSkipFirst(BREAKPOINT_EE);
 		return;
+	}
 
 	const int bpFlags = isBreakpointNeeded(pc);
 	bool hit = false;
@@ -1532,7 +1537,10 @@ void dynarecMemcheck(size_t i)
 	const u32 op = memRead32(cpuRegs.pc);
 	const OPCODE& opcode = GetInstruction(op);
 	if (CBreakPoints::CheckSkipFirst(BREAKPOINT_EE, pc) != 0)
+	{
+		CBreakPoints::ClearSkipFirst(BREAKPOINT_EE);
 		return;
+	}
 
 	auto mc = CBreakPoints::GetMemChecks(BREAKPOINT_EE)[i];
 
@@ -1606,20 +1614,22 @@ void recMemcheck(u32 op, u32 bits, bool store)
 	}
 }
 
-void encodeBreakpoint()
+bool encodeBreakpoint()
 {
 	if (isBreakpointNeeded(pc) != 0)
 	{
 		iFlushCall(FLUSH_EVERYTHING | FLUSH_PC);
 		xFastCall((void*)dynarecCheckBreakpoint);
+		return true;
 	}
+	return false;
 }
 
-void encodeMemcheck()
+bool encodeMemcheck()
 {
 	const int needed = isMemcheckNeeded(pc);
 	if (needed == 0)
-		return;
+		return false;
 
 	const u32 op = memRead32(needed == 2 ? pc + 4 : pc);
 	const OPCODE& opcode = GetInstruction(op);
@@ -1643,6 +1653,7 @@ void encodeMemcheck()
 			recMemcheck(op, 128, store);
 			break;
 	}
+	return true;
 }
 
 void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
@@ -1653,8 +1664,8 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 	// add breakpoint
 	if (!delayslot)
 	{
-		encodeBreakpoint();
-		encodeMemcheck();
+		if(encodeBreakpoint() || encodeMemcheck())
+			xFastCall((void*)CBreakPoints::CommitClearSkipFirst, BREAKPOINT_EE);
 	}
 	else
 	{
@@ -2130,28 +2141,19 @@ static bool recSkipTimeoutLoop(s32 reg, bool is_timeout_loop)
 	// if new_v0 > 0 { jump to dispatcher because loop exited early }
 	// else new_v0 is 0, so exit loop
 
-	xMOV(ebx, ptr32[&cpuRegs.cycle]); // ebx = cycle
-	xMOV(ecx, ptr32[&cpuRegs.nextEventCycle]); // ecx = nextEventCycle
-	xCMP(ebx, ecx);
-	//xJAE((void*)DispatcherEvent); // jump to dispatcher if event immediately
-
-	// TODO: In the case where nextEventCycle < cycle because it's overflowed, tack 8
-	// cycles onto the event count, so hopefully it'll wrap around. This is pretty
-	// gross, but until we switch to 64-bit counters, not many better options.
-	xForwardJB8 not_dispatcher;
-	xADD(ebx, 8);
-	xMOV(ptr32[&cpuRegs.cycle], ebx);
-	xJMP((void*)DispatcherEvent);
-	not_dispatcher.SetTarget();
+	xMOV(rbx, ptr64[&cpuRegs.cycle]); // ebx = cycle
+	xMOV(rcx, ptr64[&cpuRegs.nextEventCycle]); // ecx = nextEventCycle
+	xCMP(rbx, rcx);
+	xJAE((void*)DispatcherEvent); // jump to dispatcher if event immediately
 
 	xMOV(edx, ptr32[&cpuRegs.GPR.r[reg].UL[0]]); // eax = v0
 	xLEA(rax, ptrNative[rdx * 8 + rbx]); // edx = v0 * 8 + cycle
 	xCMP(rcx, rax);
 	xCMOVB(rax, rcx); // eax = new_cycles = min(v8 * 8, nextEventCycle)
-	xMOV(ptr32[&cpuRegs.cycle], eax); // writeback new_cycles
-	xSUB(eax, ebx); // new_cycles -= cycle
-	xSHR(eax, 3); // compute new v0 value
-	xSUB(edx, eax); // v0 -= cycle_diff
+	xMOV(ptr64[&cpuRegs.cycle], rax); // writeback new_cycles
+	xSUB(rax, rbx); // new_cycles -= cycle
+	xSHR(rax, 3); // compute new v0 value
+	xSUB(rdx, rax); // v0 -= cycle_diff
 	xMOV(ptr32[&cpuRegs.GPR.r[reg].UL[0]], edx); // write back new value of v0
 	xJNZ((void*)DispatcherEvent); // jump to dispatcher if new v0 is not zero (i.e. an event)
 	xMOV(ptr32[&cpuRegs.pc], s_nEndBlock); // otherwise end of loop
@@ -2705,7 +2707,7 @@ StartRecomp:
 			else
 			{
 				xMOV(ptr32[&cpuRegs.pc], pc);
-				xADD(ptr32[&cpuRegs.cycle], scaleblockcycles());
+				xADD(ptr64[&cpuRegs.cycle], scaleblockcycles());
 				recBlocks.Link(HWADDR(pc), xJcc32());
 			}
 		}

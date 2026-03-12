@@ -247,7 +247,6 @@ set(pcsx2SPU2Sources
 	SPU2/ADSR.cpp
 	SPU2/Debug.cpp
 	SPU2/Dma.cpp
-	SPU2/Mixer.cpp
 	SPU2/spu2.cpp
 	SPU2/ReadInput.cpp
 	SPU2/RegTable.cpp
@@ -258,6 +257,7 @@ set(pcsx2SPU2Sources
 )
 
 set(pcsx2SPU2SourcesUnshared
+	SPU2/Mixer.cpp
 	SPU2/ReverbResample.cpp
 )
 
@@ -714,6 +714,13 @@ elseif(LINUX)
 	list(APPEND pcsx2USBHeaders
 		USB/usb-eyetoy/cam-linux.h
 	)
+elseif(APPLE)
+	list(APPEND pcsx2USBSources
+		USB/usb-eyetoy/cam-macos.mm
+	)
+	list(APPEND pcsx2USBHeaders
+		USB/usb-eyetoy/cam-macos.h
+	)
 else()
 	list(APPEND pcsx2USBSources
 		USB/usb-eyetoy/cam-noop.cpp
@@ -834,6 +841,7 @@ set(pcsx2HostHeaders
 
 set(pcsx2ImGuiSources
 	ImGui/FullscreenUI.cpp
+	ImGui/FullscreenUI_Settings.cpp
 	ImGui/ImGuiFullscreen.cpp
 	ImGui/ImGuiManager.cpp
 	ImGui/ImGuiOverlays.cpp
@@ -841,6 +849,7 @@ set(pcsx2ImGuiSources
 
 set(pcsx2ImGuiHeaders
 	ImGui/FullscreenUI.h
+	ImGui/FullscreenUI_Internal.h
 	ImGui/ImGuiAnimated.h
 	ImGui/ImGuiFullscreen.h
 	ImGui/ImGuiManager.h
@@ -1144,7 +1153,6 @@ target_link_libraries(PCSX2_FLAGS INTERFACE
 	common
 	imgui
 	fmt::fmt
-	rapidyaml::rapidyaml
 	libchdr
 	libzip::zip
 	cpuinfo
@@ -1153,6 +1161,7 @@ target_link_libraries(PCSX2_FLAGS INTERFACE
 	discord-rpc
 	simpleini
 	freesurround
+	Freetype::Freetype
 	SDL3::SDL3
 	ZLIB::ZLIB
 	LZ4::LZ4
@@ -1246,11 +1255,15 @@ if (APPLE)
 	find_library(IOKIT_LIBRARY IOKit)
 	find_library(METAL_LIBRARY Metal)
 	find_library(QUARTZCORE_LIBRARY QuartzCore)
+	find_library(AVFOUNDATION_LIBRARY AVFoundation)
+	find_library(COREMEDIA_LIBRARY CoreMedia)
 	target_link_libraries(PCSX2_FLAGS INTERFACE
 		${APPKIT_LIBRARY}
 		${IOKIT_LIBRARY}
 		${METAL_LIBRARY}
 		${QUARTZCORE_LIBRARY}
+		${AVFOUNDATION_LIBRARY}
+		${COREMEDIA_LIBRARY}
 	)
 endif()
 
@@ -1265,6 +1278,9 @@ function(setup_main_executable target)
 			continue()
 		endif()
 		if (NOT WIN32 AND "${path}" MATCHES "/dx11/") # Don't include unneccessary stuff
+			continue()
+		endif()
+		if (NOT BUNDLE_EMOJI_FONT AND "${path}" MATCHES "fonts/NotoColorEmoji")
 			continue()
 		endif()
 		pcsx2_resource(${target} ${path} ${CMAKE_SOURCE_DIR}/bin/resources/)
@@ -1298,7 +1314,7 @@ function(setup_main_executable target)
 
 		# Copy dependency libraries.
 		set(DEPS_BINDIR "${CMAKE_SOURCE_DIR}/deps/bin")
-		set(DEPS_TO_COPY freetype.dll harfbuzz.dll jpeg62.dll libpng16.dll libsharpyuv.dll libwebp.dll libwebpdemux.dll libwebpmux.dll lz4.dll SDL3.dll shaderc_shared.dll zlib1.dll zstd.dll plutovg.dll plutosvg.dll)
+		set(DEPS_TO_COPY freetype.dll harfbuzz.dll jpeg62.dll libpng16.dll libsharpyuv.dll libwebp.dll libwebpdemux.dll libwebpmux.dll lz4.dll SDL3.dll shaderc_shared.dll z.dll zstd.dll plutovg.dll plutosvg.dll)
 		set(DEPS_TO_COPY
 			$<IF:$<CONFIG:Debug>,kddockwidgets-qt6d.dll,kddockwidgets-qt6.dll>
 			${DEPS_TO_COPY}
@@ -1311,6 +1327,12 @@ function(setup_main_executable target)
 		list(TRANSFORM SYMBOLS_TO_COPY REPLACE "[.]dll" ".pdb")
 		foreach(SYMBOL_TO_COPY ${SYMBOLS_TO_COPY})
 			install(FILES "${DEPS_BINDIR}/${SYMBOL_TO_COPY}" DESTINATION "${CMAKE_SOURCE_DIR}/bin" OPTIONAL)
+		endforeach()
+
+		set(AGILITY_DIR "${CMAKE_SOURCE_DIR}/deps/bin/D3D12")
+		set(AGILITY_DEPS_TO_COPY D3D12Core.dll d3d12SDKLayers.dll)
+		foreach(AGILITY_DEP_TO_COPY ${AGILITY_DEPS_TO_COPY})
+			install(FILES "${DEPS_BINDIR}/D3D12/${AGILITY_DEP_TO_COPY}" DESTINATION "${CMAKE_SOURCE_DIR}/bin/D3D12" OPTIONAL)
 		endforeach()
 
 		get_target_property(WINDEPLOYQT_EXE Qt6::windeployqt IMPORTED_LOCATION)

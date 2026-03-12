@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+// SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #pragma once
@@ -27,9 +27,9 @@ private Q_SLOTS:
 	void updateLatencyLabel();
 	void updateVolumeLabel();
 	void onMinimalOutputLatencyChanged();
-	void onOutputVolumeChanged(int new_value);
-	void onFastForwardVolumeChanged(int new_value);
-	void onOutputMutedChanged(int new_state);
+	void onStandardVolumeChanged(const int new_value);
+	void onFastForwardVolumeChanged(const int new_value);
+	void onOutputMutedChanged(const int new_state);
 
 	void onExpansionSettingsClicked();
 	void onStretchSettingsClicked();
@@ -38,7 +38,7 @@ private:
 	AudioBackend getEffectiveBackend() const;
 	AudioExpansionMode getEffectiveExpansionMode() const;
 	u32 getEffectiveExpansionBlockSize() const;
-	void resetVolume(bool fast_forward);
+	void resetVolume(const bool fast_forward);
 
 	Ui::AudioSettingsWidget m_ui;
 	u32 m_output_device_latency = 0;
