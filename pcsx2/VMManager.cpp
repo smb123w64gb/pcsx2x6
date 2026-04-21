@@ -1284,7 +1284,7 @@ bool VMManager::AutoDetectSource(const std::string& filename, Error* error)
 				s_acmedia = INI.GetStringValue("data", "media");
 				s_imgname = INI.GetStringValue("data", "mediasrc");
 
-				s_elf_override = Path::Combine(basedir, INI.GetStringValue("game", "elf"));
+				s_elf_override = Path::Combine(basedir, INI.GetStringValue("data", "elf"));
 				ACATA::SetEnv(basedir, s_imgname, s_acmedia);
 				int R;
 				if ((R = ACATA::TH::IO_OpenImage())!=0) {

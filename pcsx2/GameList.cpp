@@ -284,7 +284,7 @@ bool GameList::GetAcConfListEntry(const std::string& filename, GameList::Entry* 
 		std::string s_acmedia, s_imgname;
 			
 			
-		entry->path = Path::Combine(basedir, INI.GetStringValue("game", "elf"));
+		entry->path = Path::Combine(basedir, INI.GetStringValue("data", "elf"));
 		entry->serial.clear();
 		entry->region = Region::Other;
 		entry->type = EntryType::ELF;
