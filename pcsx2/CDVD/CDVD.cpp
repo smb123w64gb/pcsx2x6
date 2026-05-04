@@ -177,6 +177,7 @@ void cdvdLoadNVRAM()
 	}
 	else
 	{
+#if 0 // COH-H models dont have this, and system256 doesnt even use anything from the NVM beyond iLinkID
 		// Verify NVRAM is sane.
 		const NVMLayout* nvmLayout = getNvmLayout();
 		constexpr u8 zero[16] = {0};
@@ -188,6 +189,7 @@ void cdvdLoadNVRAM()
 			ERROR_LOG("Language or Region Parameters missing, filling in defaults");
 			cdvdCreateNewNVM();
 		}
+#endif
 	}
 
 	// Also load the mechacon version while we're here.
