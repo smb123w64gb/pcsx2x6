@@ -16,7 +16,7 @@ bool ACJV::enabled = false;
 
 #define ANS(addr, what) case addr: return what
 #define JVS_CHECK_ADDR_JVSPACKET(addr) ((addr & 0x00000F00) == 0x00000600) // when ACJV writes to 0x12406???.
-void handle_acjv_response();
+void do_acjv_packet();
 
 u16 RootAddr = 0x3E6F;
 u16 Sent0D = 0, Sent0C = 0;
@@ -42,7 +42,6 @@ enum BOARDID ACJV::CurrentBoardID = RAYS_PCB;
 
 extern u16 ACJV::ButtonState[JVS_PLAYER_COUNT] = {0,0};
 
-enum ACJVCMD CurrentCMD = ACJVCMD::NONE;
 u16 dipsw = (DIPS::TESTMODE|DIPS::VIDEO_VOLTAGE|DIPS::MONITOR_SYNCFREQ|DIPS::VIDEO_SYNC_SPLIT);
 u32 lastRead = 0x0;
 
@@ -53,7 +52,6 @@ u16 ACJV::Read16(u32 addr) {
 		if (/*CurrentCMD == NONE &&*/ (x == 4 || x == 6 || x == 8)) return rdbuf.at(x)|1;// initial polling expects these addrs to not be zero
         return (u16)rdbuf.at(x);
     } else if ((addr == 0x124045FE)) {
-		CurrentCMD = NONE;
 		return (u16)rdbuf.at((addr - ACJV_RDBASE)/2);
 	}
 	return 0;
@@ -65,19 +63,7 @@ void ACJV::Write16(u32 addr, u16 val) {
         wrbuf[x] = val;
     } else if (addr == 0x12404BFE) {
        wrbuf[(addr -  ACJV_WRBASE)/2] = val;
-		if      (wrbuf[0] == 0x26 && wrbuf[1] == 0xA3) CurrentCMD = JVS_INIT0;
-		else if (wrbuf[0] == 0x98 && wrbuf[1] == 0x59) CurrentCMD = JVS_INIT1;
-		else if (wrbuf[0] == 0x6F && wrbuf[1] == 0x3E) CurrentCMD = JVS_JVS;
-		else CurrentCMD = NONE;
-		handle_acjv_response();
-		if (CurrentCMD != NONE && CurrentCMD != ACJVCMD::UNKNOWN)
-			for (int i = 0; i < ACJV_PACKETSIZE; i+=32)
-			{
-				Console.WriteLn("%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
-				rdbuf[i],  rdbuf[i+1], rdbuf[i+2], rdbuf[i+3], rdbuf[i+4], rdbuf[i+5],rdbuf[i+6],rdbuf[i+7],rdbuf[i+8],
-				rdbuf[i+9],rdbuf[i+10],rdbuf[i+11],rdbuf[i+12],rdbuf[i+13],rdbuf[i+14],rdbuf[i+15]);
-			}
-		
+		do_acjv_packet();
 	}
 }
 
@@ -85,7 +71,7 @@ void ACJV::Write16(u32 addr, u16 val) {
 
 void do_jvs_packet(const u8* input, u8* output) {
 	if (input[0] != JVS_SYNC) {
-		Console.Error("ACJV::%s: Error: input does not begin with E0, (%02X, %02X)", __FUNCTION__, input[0], input[1]);
+		//Console.Error("ACJV::%s: Error: input does not begin with E0, (%02X, %02X)", __FUNCTION__, input[0], input[1]);
 		//return;
 	}
 	input++;
@@ -102,7 +88,7 @@ void do_jvs_packet(const u8* input, u8* output) {
 	(*output++) = JVS_CMD_SUCCESS;
 	while(inSize != 0) {
 		u8 cmd = (*input++);
-		Console.WriteLn("jvs_cmd:0x%02X", cmd);
+		// Console.WriteLn("jvs_cmd:0x%02X", cmd);
 		inSize--;
 		inWorkChecksum += cmd;
 		switch(cmd) {
@@ -447,15 +433,17 @@ void do_jvs_packet(const u8* input, u8* output) {
 		break;
 		default:
 			//Unknown command
-			Console.Error("ACJV::%s: unknown JVS CMD 0x%X", __FUNCTION__, cmd);
+			// Console.Error("ACJV::%s: unknown JVS CMD 0x%X", __FUNCTION__, cmd);
 			break;
 		}
 	}
 	u8 inChecksum = (*input);
-	if (inChecksum != (inWorkChecksum & 0xFF)) 
-		Console.Warning("ACJV::%s: checksum mismatch: %02X | %02X", __FUNCTION__, inChecksum, inWorkChecksum&0xFF);
+	// if (inChecksum != (inWorkChecksum & 0xFF)) 
+		// Console.Warning("ACJV::%s: checksum mismatch: %02X | %02X", __FUNCTION__, inChecksum, inWorkChecksum&0xFF);
 }
 
+
+// based on https://github.com/search?q=repo%3Ajpd002/Play-%20CSys246%3A%3AProcessJvsPacket&type=code by Jean-Philip Desjardins
 void do_acjv_packet() {
 	const u16* wr16 = wrbuf_getu16();
 	u16* rd16 = rdbuf_getu16();
@@ -468,13 +456,7 @@ void do_acjv_packet() {
 		rd16[0x30]  = dipsw;         // here the game polls the dip switch values?
 		u16 PacketID = wr16[0x0C];
 		if(PacketID != 0) {
-			Console.WriteLn("ACJV::JVS: Packet ID 0x%04X", PacketID);
-			for(int x=0; x<ACJV_PACKETSIZE; x++) {
-				if (wrbuf[x] == JVS_SYNC) {
-					Console.Warning("acjv_packet: SYNC is on rdbuf[%03X]", x);
-					break;
-				}
-			}
+			// Console.WriteLn("ACJV::JVS: Packet ID 0x%04X", PacketID);
 			if(wrbuf[0x122] == JVS_SYNC) {
 				Console.WriteLn("JVS::PACKET(0x122, 0x15A)");
 				do_jvs_packet(&wrbuf[0x122], &rdbuf[0x15A]);
@@ -487,25 +469,5 @@ void do_acjv_packet() {
 		rd16[0x15] = 0x5210;
 		rd16[0x16] = 0x5210;
 		rd16[0x17] = 0x5210;
-	}
-}
-
-void handle_acjv_response() {
-	Console.Warning("ACJV::CreateResponse CMD:%d", CurrentCMD);
-	switch (CurrentCMD)
-	{
-	case JVS_INIT0:
-		rdbuf.fill(0);
-		do_acjv_packet();
-		break;
-	case JVS_INIT1:
-		rdbuf.fill(0);
-		do_acjv_packet();
-		break;
-	case JVS_JVS:
-		do_acjv_packet();
-		break;
-	default:
-		break;
 	}
 }

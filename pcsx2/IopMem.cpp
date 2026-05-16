@@ -174,7 +174,7 @@ u16 iopMemRead16(u32 mem)
 		return V;
 	} else if (t == ACJV_RANGE) {
 		V = ACJV::Read16(mem);
-    	Console.Error("%-16s %08X:  %04X", "ACJV::read16", mem, V);
+    	// Console.Error("%-16s %08X:  %04X", "ACJV::read16", mem, V);
 		return V;
 	} else if (t == ACSRAM_RANGE) {
 		return ACSRAM::Read16(mem);
@@ -364,7 +364,7 @@ void iopMemWrite16(u32 mem, u16 value)
 	} else if (t == ACJV_RANGE) {
 		if (ACJV::enabled) {
 			ACJV::Write16(mem, value);
-    		Console.Error("%-16s %08X = %04X", "ACJV::write16", mem, value);
+    		// Console.Error("%-16s %08X = %04X", "ACJV::write16", mem, value);
 		}
 	} else if (t == ACRAM_RANGE) {
 		ACRAM::Write16(mem, value);
