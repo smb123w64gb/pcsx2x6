@@ -1,4 +1,5 @@
 #include "common/Console.h"
+#include "ACMACROS.h"
 #include "ACJV.h"
 #include <array>
 
@@ -458,10 +459,8 @@ void do_acjv_packet() {
 		if(PacketID != 0) {
 			// Console.WriteLn("ACJV::JVS: Packet ID 0x%04X", PacketID);
 			if(wrbuf[0x122] == JVS_SYNC) {
-				Console.WriteLn("JVS::PACKET(0x122, 0x15A)");
 				do_jvs_packet(&wrbuf[0x122], &rdbuf[0x15A]);
 			} else {
-				Console.WriteLn("JVS::PACKET(0x22, 0x5A)");
 				do_jvs_packet(&wrbuf[0x22],  &rdbuf[0x5A]);
 			}
 			rd16[0x20] = PacketID;
