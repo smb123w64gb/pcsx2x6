@@ -6,6 +6,7 @@
 #include "common/Path.h"
 #include "common/StringUtil.h"
 #include "ps2/BiosTools.h"
+#include "ACMACROS.h"
 
 u8 ACSRAM::buffer[NamcoMemSize::ACSRAM];
 u8 compbuf[NamcoMemSize::ACSRAM] = {0};
@@ -23,6 +24,7 @@ int ACSRAM::ReadFile() {
         // this is even problematic on real hardware, where such games can behave erratically when ran on a machine whose ACSRAM has payload of another game
         if (std::fread(compbuf, sizeof(compbuf), 1, FD) == 1) {
             std::memcpy(ACSRAM::buffer, compbuf, NamcoMemSize::ACSRAM);
+
             return 1;
         } else {
             Console.ErrorFmt("ACSRAM: Could not read all the data");
@@ -72,16 +74,16 @@ int ACSRAM::WriteFile() {
     return 0;
 }
 
-#define OOB_REPORT(T) Console.Error("ACSRAM: out of bound %s: %08X", __FUNCTION__, T);
+#define OOB_REPORT(T) Console.Error("%s: out of bound index: %08X", __FUNCTION__, T);
 #define GET_SRAM_OFF(t) ((addr - ACSRAM_ADDR_BASE_IOP_POV)/2) // u8 buffer on u16 MMIO, halve the address to get real offset
 
 void ACSRAM::Clear(u8 fillerbyte) {
     std::memset(ACSRAM::buffer, fillerbyte, sizeof(ACSRAM::buffer));
 }
-
 u16 ACSRAM::Read16(u32 addr) {
     u32 T = GET_SRAM_OFF(addr);
     if (T < ACSRAM_MAX_SIZE) {
+        //Console.WriteLn(Color_StrongCyan, "%-16s %04X:  %02X", __FUNCTION__, T, ACSRAM::buffer[T]);
         return ACSRAM::buffer[T];
     } else OOB_REPORT(T);
     return 0;
@@ -90,6 +92,7 @@ u16 ACSRAM::Read16(u32 addr) {
 void ACSRAM::Write16(u32 addr, u16 val) {
     u32 T = GET_SRAM_OFF(addr);
     if (T < ACSRAM_MAX_SIZE) {
-        ACSRAM::buffer[T] = (val & 0xFF);
+        //Console.WriteLn(Color_StrongCyan, "%-16s %04X = %02X", __FUNCTION__, T, val);
+        ACSRAM::buffer[T] = val;
     } else OOB_REPORT(T);
 }
