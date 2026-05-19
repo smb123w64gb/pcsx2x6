@@ -1,7 +1,7 @@
 #pragma once
 #include "MemoryTypes.h"
 
-#define ACUART_BASE 0xB2418000 // everything, both reg set and I/O is done in that little 0xFFF range
+#define ACUART_BASE 0x12418000 // everything, both reg set and I/O is done in that little 0xFFF range
 #define IS_ACUART_RANGE(a) ((a & 0xFFFFF000) == ACUART_BASE)
 
 namespace ACUART {
