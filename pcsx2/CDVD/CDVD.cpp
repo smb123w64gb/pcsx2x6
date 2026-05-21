@@ -3074,7 +3074,7 @@ static void cdvdWrite16(u8 rt) // SCOMMAND
 			default:
 				SetSCMDResultSize(1); //in:0
 				cdvd.SCMDResultBuff[0] = 0x80; // 0 complete ; 1 busy ; 0x80 error
-				Console.WriteLn("SCMD Unknown %x", rt);
+				Console.Warning("SCMD Unknown %x", rt);
 				break;
 		} // end switch
 
