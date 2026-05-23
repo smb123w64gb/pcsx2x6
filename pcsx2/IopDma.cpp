@@ -161,7 +161,7 @@ void psxDma8(u32 madr, u32 bcr, u32 chcr)
 			break;
 
 		case 0x01000200: //dev9 to cpu transfer
-			Console.Warning("*** DMA 8 - DEV9 dev9mem *** %lx addr = %lx size = %lx", chcr, madr, bcr);
+			PSXDMA_LOG("*** DMA 8 - DEV9 dev9mem *** %lx addr = %lx size = %lx", chcr, madr, bcr);
 			DEV9readDMA8Mem((u32*)iopPhysMem(madr), size);
 			break;
 
