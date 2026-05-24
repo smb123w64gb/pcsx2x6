@@ -68,7 +68,8 @@ void ACATA::write16(u32 addr, u16 val) {
     case ACATA_R_HCYL:    R_HCYL    = val; break;
     case ACATA_R_SELECT:  R_SELECT  = val; break;
     case ACATA_R_COMMAND:
-        ACATA::handle_cmd(val); return;
+        // uyjulian says: "Yeah it should be masked and high byte is command type"
+        ACATA::handle_cmd(val & 0xFF); return;
     
     case ACATA_R_DATA:
         ACATA::handle_dataW(addr, val);
