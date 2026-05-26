@@ -3,8 +3,7 @@
 A fork of PCSX2 oriented to emulation of NAMCO System246 and System256 units
 
 
-## FAQ
+## Special Thanks to:
 
-> will this support System147/148 some day?
-
-NO
+- DiscoStarSlayer, Uyjulian, krHACKen, and many more for all your help
+- Berion for the new app icon
