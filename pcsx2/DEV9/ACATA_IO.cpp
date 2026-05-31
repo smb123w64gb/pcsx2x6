@@ -21,6 +21,7 @@ bool ACATA::TH::b_isIdle,
     ACATA::TH::ioRead;
 std::condition_variable ACATA::TH::Idle_cv, ACATA::TH::ioReady;
 FILE* ACATA::TH::IMAGE;
+s64 ACATA::TH::IMAGESIZE;
 int ACATA::TH::readBufferLen;
 u8* ACATA::TH::readBuffer = nullptr;
 u32 ACATA::TH::sectorsize = ACATAPI::CONSTANTS::DVD_SECTORSIZE; //TODO: remove hardcode before testing HDD/CD games !
@@ -116,12 +117,20 @@ void ACATA::TH::IO_Write(u32* addr, u32 size) {
 
 int ACATA::TH::IO_OpenImage() {
     ACATA::TH::IMAGE = std::fopen(ACATA::imgpath.c_str(), "r+b");
-	if (!ACATA::TH::IMAGE) {
+
+	if (!ACATA::TH::IMAGE)
 		ACATA::TH::IMAGE = std::fopen(ACATA::imgpath.c_str(), "rb");
-	}
+
 	if (!ACATA::TH::IMAGE) {
 		Console.ErrorFmt("{}> fail to fopen '{}' w/ error {} '{}'", __FUNCTION__, ACATA::imgpath, errno, strerror(errno));
 		return errno;
+	}
+	s64 t;
+	if ((t = FileSystem::GetPathFileSize(ACATA::imgpath.c_str())) > 0)
+		ACATA::TH::IMAGESIZE = t;
+	else {
+		Console.ErrorFmt("{}> fail to get filesize: {}", __FUNCTION__, t);
+		return EINVAL;
 	}
 	Console.WriteLn("%s: image opened ok", __FUNCTION__);
 	return 0;

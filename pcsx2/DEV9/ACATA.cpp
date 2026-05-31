@@ -2,6 +2,7 @@
 #include "ACATAPI.h"
 #include "ACCORE.h"
 #include "common/Console.h"
+#include "common/FileSystem.h"
 
 #include "ACMACROS.h"
 
@@ -248,14 +249,14 @@ void ACATA::handle_cmd(u16 val) {
     case ATA_C_READ_SECTOR: {
         u32 lba = R_SECTOR | (R_LCYL << 8) | (R_HCYL << 16) | ((R_SELECT & 0x0F) << 24);
         u32 count = R_NSECTOR ? R_NSECTOR : 256;
-        u32 total = count * 512;
+        u32 total = count * ATA_SECTORSIZE;
         if (!ACATA::TH::IMAGE || total > sizeof(ata_pio_buf)) {
             R_STATUS |= ATA_STAT_ERR;
             R_ERROR = ATA_ERR_ABORT;
             ACCORE::intr(ACCORE::INTRN_ATA);
             break;
         }
-        fseeko(ACATA::TH::IMAGE, (off_t)lba * 512, SEEK_SET);
+        FileSystem::FSeek64(ACATA::TH::IMAGE, (s64)lba * ATA_SECTORSIZE, SEEK_SET);
         size_t rd = fread(ata_pio_buf, 1, total, ACATA::TH::IMAGE);
         if (rd != total) {
             Console.Error("ATA_C_READ_SECTOR: short read (%zu/%u) at LBA %u", rd, total, lba);
@@ -280,7 +281,7 @@ void ACATA::handle_cmd(u16 val) {
         u32 count = R_NSECTOR ? R_NSECTOR : 256;
         ACATA::TH::LBA = lba;
         ACATA::TH::nsector = count;
-        ACATA::TH::sectorsize = 512;
+        ACATA::TH::sectorsize = ATA_SECTORSIZE;
         ACCORE::DMA::PendTrasnfType = ACCORE::DMA::ATA;
         ACATA::cmd_handled = val;
         R_STATUS |= ATA_STAT_BUSY;
@@ -300,7 +301,7 @@ void ACATA::handle_cmd(u16 val) {
         u32 count = R_NSECTOR ? R_NSECTOR : 256;
         ACATA::TH::LBA = lba;
         ACATA::TH::nsector = count;
-        ACATA::TH::sectorsize = 512;
+        ACATA::TH::sectorsize = ATA_SECTORSIZE;
         ACCORE::DMA::PendTrasnfType = ACCORE::DMA::ATA_WRITE;
         ACATA::cmd_handled = val;
         R_STATUS |= ATA_STAT_BUSY;

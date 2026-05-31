@@ -2,6 +2,7 @@
 #include "ACATAPI.h"
 #include "ACATA.h"
 #include "common/Console.h"
+#include "common/FileSystem.h"
 
 #include "ACMACROS.h"
 
@@ -109,9 +110,8 @@ void ACATAPI::handle_cmd(atapi_packet_t P) {
         break;
 
     case ATAPICMD::READ_CAPACITY: {
-        struct stat st;
-        if (ACATA::TH::IMAGE && fstat(fileno(ACATA::TH::IMAGE), &st) == 0 && st.st_size > 0) {
-            u32 last_lba = (u32)(st.st_size / ACATAPI::CONSTANTS::DVD_SECTORSIZE) - 1;
+        if (ACATA::TH::IMAGE && ACATA::TH::IMAGESIZE > 0) {
+            u32 last_lba = (u32)(ACATA::TH::IMAGESIZE / ACATAPI::CONSTANTS::DVD_SECTORSIZE) - 1;
             u32 block_len = ACATAPI::CONSTANTS::DVD_SECTORSIZE;
             atapi_pio_buf[0] = (last_lba >> 24) & 0xFF;
             atapi_pio_buf[1] = (last_lba >> 16) & 0xFF;
@@ -123,7 +123,7 @@ void ACATAPI::handle_cmd(atapi_packet_t P) {
             atapi_pio_buf[7] = block_len & 0xFF;
             atapi_pio_setup(8);
         } else {
-            Console.Error("ACATAPI:READ_CAPACITY: image not open or fstat failed");
+            Console.Error("ACATAPI:READ_CAPACITY: image not open or size invalid");
             ACATA::R_STATUS |= ATA_STAT_ERR;
             ACATA::R_ERROR = ATA_ERR_ABORT;
         }
