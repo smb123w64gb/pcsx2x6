@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Common/ARCADE.h"
+#include "common/ARCADE.h"
 #include "ACATA.h"
 #include <cstdint>
 #include <string>
