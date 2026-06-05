@@ -1068,6 +1068,7 @@ void VMManager::UpdateDiscDetails(bool booting)
 		}
 		else if (!s_acgame.empty()) {
 			//s_disc_serial = Path::GetFileTitle(s_acgame);
+			title = s_title;
 			s_disc_version = {};
 			s_disc_crc = 0;
 		}
@@ -1298,6 +1299,7 @@ bool VMManager::AutoDetectSource(const std::string& filename, Error* error)
 				std::string s_acmedia, s_imgname, s_serial;
 				s_acmedia = INI.GetStringValue("data", "media");
 				s_imgname = INI.GetStringValue("data", "mediasrc");
+				s_title = s_serial = INI.GetStringValue("game", "name");
 				s_disc_serial = s_serial = INI.GetStringValue("game", "gameid");
 				std::string platform = INI.GetStringValue("game", "platform", "");
 				s_acgame_sys246 = (platform == "246" || platform == "256");
@@ -3837,7 +3839,7 @@ void VMManager::InitializeDiscordPresence()
 		return;
 
 	DiscordEventHandlers handlers = {};
-	Discord_Initialize("1025789002055430154", &handlers, 0, nullptr);
+	Discord_Initialize("1512493978174619709", &handlers, 0, nullptr);
 	s_discord_presence_active = true;
 
 	UpdateDiscordPresence(true);
@@ -3864,7 +3866,7 @@ void VMManager::UpdateDiscordPresence(bool update_session_time)
 
 	// https://discord.com/developers/docs/rich-presence/how-to#updating-presence-update-presence-payload-fields
 	DiscordRichPresence rp = {};
-	rp.largeImageKey = "4k-pcsx2";
+	rp.largeImageKey = "appiconlarge";
 	rp.largeImageText = "PCSX2x6 SYSTEM246 Emulator";
 	rp.startTimestamp = s_discord_presence_time_epoch;
 	rp.details = s_title.empty() ? TRANSLATE("VMManager", "No Game Running") : s_title.c_str();
