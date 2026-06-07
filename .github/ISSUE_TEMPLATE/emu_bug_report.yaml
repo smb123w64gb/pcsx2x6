@@ -11,9 +11,9 @@ body:
       value: |
         ## Important: Read First
 
-        If you need help configuring the emulator please make a request on our forums or contact us on discord.
+        If you need help configuring the emulator please contact us on discord.
 
-        If you are unsure, start with [PCSX2x6 discord](https://discord.gg/ghpjzNX7pH).
+        If you are unsure, start with [PCSX2x6 discord](https://discord.com/invite/ghpjzNX7pH).
 
         Please make an effort to make sure your issue isn't already reported.
 
@@ -47,7 +47,7 @@ body:
       value: |
         ## System Info
 
-        Please make sure your system meets our requirements for OS version, CPU and GPU
+        Please make sure your system meets the requirements of base PCSX2 for OS version, CPU and GPU
         - [System Requirements](https://github.com/PCSX2/pcsx2#system-requirements).
 
         Performance issues as a result of not meeting our hardware requirements are not valid.
@@ -56,7 +56,7 @@ body:
   - type: input
     id: rev
     attributes:
-      label: PCSX2 Revision
+      label: PCSX2x6 Revision
       description: "please, try reproducing on latest available version before reporting"
       placeholder: "Example: v2.5.374"
     validations:
