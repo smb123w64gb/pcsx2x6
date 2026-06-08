@@ -21,6 +21,8 @@ body:
 
         Do not create issues involving software piracy of BIOS or ISO files, our rules specifically prohibit this and your issue will be closed.
 
+        Do not Create issues asking for specific game support! first, check if your game has associated issue tickets on the [compatibility table](https://github.com/PS2Homebrew-arcade/pcsx2x6/issues/9). if there's none: ask on discord first
+
   - type: textarea
     id: desc
     attributes:
@@ -132,6 +134,7 @@ body:
         Please feel free to attach any logs, block dumps, GSdump, etc here.
         If PCSX2 crashed, please post crash logs and the .dmp file (in a zip file) if appropriate.
         If your problem is graphical in nature it is highly recommended that you provide a GSdump. [GSdump Guide](https://forums.pcsx2.net/Thread-How-to-create-a-proper-GS-dump)
+        **Note**: compared to retail games, SYSTEM2x6 games tend to have more debug logging left on them, therefore enabling the EE and IOP console on the debug tab might provide us with more information
     validations:
       required: false
   - type: input
