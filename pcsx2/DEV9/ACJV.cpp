@@ -355,9 +355,9 @@ static const std::map<std::string, FightingLayout> s_fighting_layouts = {
 	{"NM00029", FightingLayout::STANDARD},   // Kinnikuman MGP
 	{"NM00035", FightingLayout::STANDARD},   // YuYu Hakusho
 	{"NM00040", FightingLayout::STANDARD},   // Kinnikuman MGP 2
-	{"NM00011", FightingLayout::SIX_BUTTON}, // Pride GP 2003
+	{"NM00011", FightingLayout::STANDARD},   // Pride GP 2003
 	{"NM00018", FightingLayout::SIX_BUTTON}, // Capcom Fighting Jam
-	{"NM00042", FightingLayout::SIX_BUTTON}, // Sengoku Basara X
+	{"NM00042", FightingLayout::STANDARD},   // Sengoku Basara X
 };
 
 // Gamepad input -> JVS button state: set or clear a button bit for a player

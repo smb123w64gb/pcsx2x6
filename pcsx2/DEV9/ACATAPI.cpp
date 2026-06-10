@@ -271,8 +271,19 @@ void ACATAPI::handle_cmd(atapi_packet_t P) {
         atapi_complete_nodata();
         break;
 
+    case ATAPICMD::SET_STREAMING: {
+        u16 param_len = (P.raw8[9] << 8) | P.raw8[10];
+        if (param_len > 0) {
+            atapi_pio_write_setup(param_len);
+        } else {
+            atapi_complete_nodata();
+        }
+        break;
+    }
+
     default:
         Console.Error("ACATAPI: UNK_CMD %02X, lba:%08X, nsec:%04X", P.raw8[0], transf_lba, nsec);
+        atapi_complete_nodata();
         break;
     }
 }
