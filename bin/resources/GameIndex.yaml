@@ -176,7 +176,7 @@ NM00041:
   bootprog: T10LOAD
 NM00042:
   name: Sengoku Basara X
-  region: System256
+  region: System246
   bootprog: BASLOAD
 NM00043:
   name: Mobile Suit Gundam - Gundam vs. Gundam
