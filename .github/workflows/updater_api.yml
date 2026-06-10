@@ -18,6 +18,7 @@ jobs:
         TAG=${{ github.event.release.tag_name }}
         gh api repos/PS2Homebrew-arcade/pcsx2x6/releases/tags/$TAG > release.json
         node scripts/api/index.js release.json docs/api/nightly.json
+        cat docs/api/nightly.json
     
     - name: commit change
       uses: EndBug/add-and-commit@v10
